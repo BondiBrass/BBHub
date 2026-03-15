@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BBHub v6</title>
+  <meta name="description" content="BBHub – Bondi Brass gigs, rehearsals, RSVP, activity, strength and stage layout." />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,500,0,0" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <aside id="sidePanel" class="sidePanel hidden">
+    <div class="sideHeader">
+      <span class="material-symbols-outlined">menu</span>
+      <div>
+        <div class="sideTitle">BBHub</div>
+        <div class="sideSub">Bondi Brass</div>
+      </div>
+    </div>
+
+    <nav class="sideNav">
+      <button class="navBtn active" data-view="home"><span class="material-symbols-outlined">home</span><span>Home</span></button>
+      <button class="navBtn" data-view="stage"><span class="material-symbols-outlined">stadia_controller</span><span>Stage Layout</span></button>
+      <button class="navBtn" data-view="library"><span class="material-symbols-outlined">library_music</span><span>Band Library</span></button>
+      <button class="navBtn" data-view="planner"><span class="material-symbols-outlined">event_note</span><span>Planner</span></button>
+      <button class="navBtn" data-view="debug"><span class="material-symbols-outlined">bug_report</span><span>Debug</span></button>
+    </nav>
+  </aside>
+
+  <div id="scrim" class="scrim hidden"></div>
+
+  <header class="topbar">
+    <div class="topbar__left">
+      <button class="iconBtn" id="menuBtn" title="Menu">
+        <span class="material-symbols-outlined">menu</span>
+      </button>
+      <img class="brandLogo" src="images/wbbb_logo_350px.png" alt="Bondi Brass logo" />
+      <div class="brandBlock">
+        <h1>BBHub</h1>
+        <div id="summaryLine" class="sub">loading...</div>
+        <div id="statusLine" class="sub">Not loaded</div>
+      </div>
+    </div>
+
+    <div class="topbar__right">
+      <div id="greetingPill" class="userPill">Welcome Guest</div>
+      <button class="iconBtn authIconBtn" id="loginBtn" title="Login"><span class="material-symbols-outlined">person</span></button>
+      <button class="iconBtn authIconBtn hidden" id="logoutBtn" title="Logout"><span class="material-symbols-outlined">logout</span></button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-home" class="view active">
+      <section class="hero card" id="heroSection">
+        <div class="hero__media">
+          <img src="images/hubphoto.jpg" alt="Bondi Brass band" />
+        </div>
+        <div class="hero__content">
+          <div class="label label--accent">Bondi Brass Hub</div>
+          <h2>Music, gigs, rehearsals — all in one hub.</h2>
+          <p class="heroText">A cleaner front door for the band: fast to scan, easy to use, and good enough to show people without apology.</p>
+          <div class="heroActions">
+            <button class="primaryBtn heroBtn" data-go-view="planner"><span class="material-symbols-outlined">event_note</span><span>Explore planner</span></button>
+            <button class="pillBtn heroBtn heroBtn--ghost" data-go-view="stage"><span class="material-symbols-outlined">stadia_controller</span><span>See stage layout</span></button>
+          </div>
+          <div class="heroChips">
+            <span class="heroChip">Next Gig</span>
+            <span class="heroChip">Band Strength</span>
+            <span class="heroChip">Planner</span>
+            <span class="heroChip">Stage Layout</span>
+            <span class="heroChip">Band Library</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="playersNeededBar" class="alertBar hidden"></section>
+
+      <section class="grid grid--cards">
+        <article class="card"><div id="nextGigCard" class="empty">Loading…</div></article>
+        <article class="card"><div id="nextRehCard" class="empty">Loading…</div></article>
+      </section>
+
+      <section class="card">
+        <div class="sectionHead">
+          <div>
+            <div class="label">Your Activity</div>
+            <h2>Participation snapshot</h2>
+          </div>
+        </div>
+        <div id="activityMatrix" class="empty">Loading…</div>
+      </section>
+
+      <section class="card">
+        <div class="sectionHead sectionHead--stack-mobile">
+          <div>
+            <div class="label">Band Strength</div>
+            <h2>Upcoming coverage</h2>
+          </div>
+          <label class="togglePill"><input type="checkbox" id="ignoreRehearsalsToggle" /> <span>Ignore rehearsals</span></label>
+        </div>
+        <div id="strengthMatrix" class="empty">Loading…</div>
+      </section>
+    </section>
+
+    <section id="view-stage" class="view">
+      <section class="card">
+        <div class="label">Stage layout</div>
+        <h2>Band seating</h2>
+        <div class="toolbar toolbar--wrap">
+          <label class="field">
+            <span>Event</span>
+            <select id="stageEventSelect"></select>
+          </label>
+          <div class="segmented" id="stageModeSeg">
+            <button class="segBtn" data-stage-mode="plan">Plan</button>
+            <button class="segBtn active" data-stage-mode="swimlane">Swimlane</button>
+            <button class="segBtn" data-stage-mode="table">Table</button>
+          </div>
+          <div class="legend">
+            <span><i class="swatch ok"></i> available</span>
+            <span><i class="swatch maybe"></i> maybe</span>
+            <span><i class="swatch no"></i> vacant / no</span>
+          </div>
+        </div>
+        <div class="stageTools">
+          <button class="iconBtn" id="stageZoomInBtn" title="Zoom in"><span class="material-symbols-outlined">zoom_in</span></button>
+          <button class="iconBtn" id="stageZoomOutBtn" title="Zoom out"><span class="material-symbols-outlined">zoom_out</span></button>
+          <button class="iconBtn" id="stagePanLeftBtn" title="Pan left"><span class="material-symbols-outlined">keyboard_arrow_left</span></button>
+          <button class="iconBtn" id="stagePanRightBtn" title="Pan right"><span class="material-symbols-outlined">keyboard_arrow_right</span></button>
+          <button class="iconBtn" id="stagePanUpBtn" title="Pan up"><span class="material-symbols-outlined">keyboard_arrow_up</span></button>
+          <button class="iconBtn" id="stagePanDownBtn" title="Pan down"><span class="material-symbols-outlined">keyboard_arrow_down</span></button>
+          <button class="pillBtn" id="stageFitBtn"><span class="material-symbols-outlined">fit_screen</span><span>Fit</span></button>
+        </div>
+        <div class="stageWrap" id="stageVisualWrap">
+          <svg id="stageSvg" viewBox="0 0 1000 760" aria-label="Stage layout"></svg>
+        </div>
+        <div id="stageTableWrap" class="stageTableWrap" hidden></div>
+      </section>
+    </section>
+
+    <section id="view-library" class="view">
+      <section class="card">
+        <div class="label">Band Library</div>
+        <h2>Pieces</h2>
+        <div id="libraryList" class="empty">Loading…</div>
+      </section>
+    </section>
+
+    <section id="view-planner" class="view">
+      <section class="card">
+        <div class="sectionHead sectionHead--stack-mobile">
+          <div>
+            <div class="label">Planner</div>
+            <h2>Upcoming events</h2>
+          </div>
+          <label class="togglePill"><input type="checkbox" id="plannerIgnoreRehearsalsToggle" /> <span>Ignore rehearsals</span></label>
+        </div>
+        <div id="plannerList" class="empty">Loading…</div>
+      </section>
+    </section>
+
+    <section id="view-debug" class="view">
+      <section class="card">
+        <div class="label">Debug</div>
+        <h2>Startup diagnostics</h2>
+        <div id="debugBox"></div>
+      </section>
+    </section>
+    </main>
+
+  <footer class="pageFooter">
+    <button class="iconBtn backTopBtn" id="backTopBtn" title="Back to top">
+      <span class="material-symbols-outlined">arrow_upward</span>
+    </button>
+  </footer>
+
+  <dialog id="loginDialog" class="loginDialog">
+    <form method="dialog" class="loginPanel">
+      <div class="loginHead">
+        <div>
+          <div class="label">Member login</div>
+          <h3>Find your BBHub identity</h3>
+        </div>
+        <button class="iconBtn" value="cancel" title="Close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <label class="field">
+        <span>Login name</span>
+        <input id="loginKeyInput" placeholder="roy.hill" autocomplete="off" />
+      </label>
+
+      <div class="loginHelp">Example: <code>roy.hill</code></div>
+      <div id="loginResult" class="loginResult muted">Type a login name and press find.</div>
+
+      <div class="loginActions">
+        <button type="button" class="primaryBtn" id="findLoginBtn">Find me</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
