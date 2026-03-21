@@ -20,9 +20,20 @@ function nowHeaderText(){
   const time = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   return time;
 }
+function getInitials(name){
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return (parts[0]?.[0] || "B") + (parts[1]?.[0] || parts[0]?.[1] || "B");
+}
 function updateGreeting(){
-  const hi = state.session ? `Hi ${state.session.first_name || state.session.display_name || "Member"}` : "Welcome Guest";
-  $("greetingPill").textContent = state.session ? `${nowHeaderText()} · ${hi}` : hi;
+  const pill = $("greetingPill");
+  if(state.session){
+    const name = state.session.display_name || [state.session.first_name, state.session.last_name].filter(Boolean).join(" ") || "Member";
+    const initials = escapeHtml(getInitials(name).toUpperCase());
+    const first = escapeHtml(state.session.first_name || state.session.display_name || "Member");
+    pill.innerHTML = `<span class="avatarCircle">${initials}</span><span class="userPill__text"><strong>Hi ${first}</strong><span>${escapeHtml(nowHeaderText())}</span></span>`;
+  }else{
+    pill.innerHTML = `<span class="userPill__text"><strong>Welcome guest</strong><span>Login to book into gigs</span></span>`;
+  }
   $("loginBtn").classList.toggle("hidden", !!state.session);
   $("logoutBtn").classList.toggle("hidden", !state.session);
 }
@@ -47,7 +58,25 @@ function labelForStatus(status){
   return "unknown";
 }
 function statusClass(status){ return String(status || "").toUpperCase().toLowerCase() || "none"; }
-function rsvpFor(eventId, memberId){ return (state.rsvp || []).find(r => String(r.event_id) === String(eventId) && String(r.member_id) === String(memberId)) || null; }
+function parseRsvpTimestamp(r){
+  const raw = r?.timestamp || "";
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function normEventId(v){
+  return String(v || "").replace(/^e/, "").trim();
+}
+
+function rsvpFor(eventId, memberId){
+  return (state.rsvp || [])
+    .filter(r =>
+      normEventId(r.event_id) === normEventId(eventId) &&
+      String(r.member_id || "").trim() === String(memberId || "").trim()
+    )
+    .sort((a, b) => parseRsvpTimestamp(b) - parseRsvpTimestamp(a))[0] || null;
+}
+
 function memberById(id){ return (state.members || []).find(m => String(m.member_id) === String(id)) || null; }
 function normalizeChair(ch){
   return {
@@ -107,9 +136,12 @@ function timeAgoShort(d){
   return `${months}mo ago`;
 }
 function renderSavedResponseMeta(resp){
-  if(!resp) return "";
-  const when = timeAgoShort(parseResponseDate(resp));
-  return `<div class="responseSavedMeta"><span class="material-symbols-outlined">verified</span><span>${escapeHtml(labelForStatus(resp.status))}${when ? ` · saved ${escapeHtml(when)}` : ""}</span></div>`;
+  if(!resp || !state.session) return "";
+  const d = parseResponseDate(resp);
+  const when = timeAgoShort(d);
+  const exact = d ? d.toLocaleString([], { weekday:"short", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+  const who = escapeHtml(getInitials(state.session.display_name || [state.session.first_name, state.session.last_name].filter(Boolean).join(" ") || "Member").toUpperCase());
+  return `<div class="responseSavedMeta"><span class="avatarCircle avatarCircle--tiny">${who}</span><span>You’re ${escapeHtml(labelForStatus(resp.status))}${when ? ` · updated ${escapeHtml(when)}` : ""}${exact ? ` · ${escapeHtml(exact)}` : ""}</span></div>`;
 }
 function renderEventCard(host, label, event, emptyText){
   if(!event){ host.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`; return; }
@@ -127,13 +159,13 @@ function renderEventCard(host, label, event, emptyText){
   const attireText = event.uniform || (event.type === "rehearsal" ? "Bring music / casual" : "TBC");
 
   host.innerHTML = `
-    <div class="compactCard eventCard eventCard--${theme}" data-event-id="${escapeHtml(event.event_id)}">
+    <div class="compactCard eventCard eventCard--${theme} ${label === "NEXT GIG" ? "eventCard--hero" : ""}" data-event-id="${escapeHtml(event.event_id)}">
       <div class="compactCard__row">
         <div class="compactCard__left">
           <span class="material-symbols-outlined compactCard__icon">${event.type === "rehearsal" ? "music_note" : "celebration"}</span>
           <span class="compactCard__title">${escapeHtml(event.title)}</span>
         </div>
-        ${state.session ? renderResponseMatrix(event.event_id, status, response) : `<button class="pillBtn loginPromptBtn" data-open-login="1">Login</button>`}
+        ${state.session ? renderResponseMatrix(event.event_id, status, response) : `<button class="pillBtn loginPromptBtn" data-open-login="1">Login to RSVP</button>`}
       </div>
       <div class="compactCard__row">
         <div class="compactCard__left">

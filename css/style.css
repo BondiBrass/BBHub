@@ -187,3 +187,55 @@ html[data-theme="dark"] .heroChip,html[data-theme="dark"] .heroBtn--ghost,html[d
 .stageTools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 12px}
 .stageTableWrap[hidden],#stageVisualWrap[hidden]{display:none !important}
 .stageTable{width:100%;border-collapse:collapse;font-size:14px}.stageTable th,.stageTable td{border-bottom:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top}.stageTable th{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em}.stageTable tr.status-y{background:color-mix(in srgb, var(--ok) 14%, transparent)}.stageTable tr.status-m{background:color-mix(in srgb, var(--maybe) 18%, transparent)}.stageTable tr.status-n{background:color-mix(in srgb, var(--no) 10%, transparent)}.chairChip{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--chip);font-weight:700}.stageName{font-weight:700}.stageSub{font-size:12px;color:var(--muted)}
+
+
+/* v11.1 mobile refresh */
+.userPill{display:flex;align-items:center;gap:10px;min-height:48px;padding:8px 12px}
+.userPill__text{display:flex;flex-direction:column;line-height:1.1}
+.userPill__text strong{font-size:13px}
+.userPill__text span{font-size:12px;color:var(--muted);font-weight:600;margin-top:3px}
+.avatarCircle{width:34px;height:34px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#d6b459,#bf9b30);color:#201800;font-weight:900;font-size:13px;letter-spacing:.02em;flex:0 0 auto;box-shadow:0 6px 16px rgba(191,155,48,.28)}
+.avatarCircle--tiny{width:22px;height:22px;font-size:10px;box-shadow:none}
+.heroText--tagline{font-size:18px;font-weight:900;color:#1f2937}
+.eventCard{transition:transform .18s ease, box-shadow .18s ease}
+.eventCard:hover{transform:translateY(-2px);box-shadow:0 14px 26px rgba(16,24,39,.10)}
+.eventCard--hero{padding:6px;background:linear-gradient(180deg, rgba(214,180,89,.18), rgba(214,180,89,.06))}
+.eventCard--hero .compactCard{padding:18px}
+.eventCard--hero .compactCard__title{font-size:20px;white-space:normal;line-height:1.1}
+.eventCard--hero .themePill{background:#fff2c3;border-color:rgba(191,155,48,.24)}
+.compactCard__countdown{background:rgba(255,255,255,.45);padding:6px 10px;border-radius:999px}
+.responseMini{width:36px;height:34px;font-size:16px}
+.responseMini.active{outline:2px solid rgba(11,99,255,.24);box-shadow:0 0 0 5px rgba(11,99,255,.08)}
+.responseSavedMeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;text-align:right}
+.responseSavedMeta span:last-child{line-height:1.25}
+.loginPromptBtn{font-weight:800}
+@media (max-width: 920px){
+  .hero{grid-template-columns:1fr;min-height:420px}
+  .hero__media{order:0;max-height:none;min-height:420px}
+  .hero__media::after{bottom:14px;left:14px}
+  .hero__content{position:absolute;inset:auto 0 0 0;z-index:2;padding:22px 18px 18px;background:linear-gradient(180deg, rgba(10,12,16,.08), rgba(10,12,16,.82) 42%, rgba(10,12,16,.94) 100%)}
+  .hero__content h2,.heroText,.heroText--tagline,.heroChip{color:#fff}
+  .hero__content h2{font-size:clamp(32px,8vw,48px);max-width:11ch}
+  .heroText{max-width:32ch;color:rgba(255,255,255,.88)}
+  .heroText--tagline{font-size:18px;color:#fff}
+  .heroChip{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.18)}
+  .heroBtn--ghost{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.18)}
+}
+@media (max-width: 620px){
+  .topbar{padding:12px 14px}
+  .topbar__left{min-width:0;flex:1}
+  .topbar__right{margin-left:auto}
+  .brandBlock{display:none}
+  .brandLogo{width:44px;height:44px}
+  main{padding:10px}
+  .hero{min-height:460px}
+  .hero__media{min-height:460px}
+  .hero__content{padding:18px 16px 16px}
+  .heroActions{display:grid;grid-template-columns:1fr;gap:10px}
+  .grid--cards{grid-template-columns:1fr}
+  .compactCard__row{flex-wrap:wrap}
+  .compactCard__title{white-space:normal;line-height:1.15}
+  .compactCard__metaText{white-space:normal}
+  .responseMatrixWrap{width:100%;align-items:flex-start}
+  .responseSavedMeta{text-align:left}
+}
