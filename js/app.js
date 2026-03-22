@@ -5,9 +5,10 @@ import { compactFromNowLabel, escapeHtml, formatEventDateParts } from "./utils.j
 
 const state = {
   source:"unknown", members:[], rawEvents:[], events:[], program:[], pieces:[],
-  rsvp:[], bandChairs:[], assignments:[], session:null,
-  selectedEventId:"", savingRsvp:false, stageMode:"swimlane", stageViewBox:{x:0,y:0,w:1000,h:760},
-  ignoreRehearsals: localStorage.getItem("bbhub.ignoreRehearsals") === "1"
+  rsvp:[], bandChairs:[], assignments:[], bands:[], session:null,
+  selectedEventId:"", savingRsvp:false, stageMode:(localStorage.getItem("bbhub.stageMode") || "table"), stageViewBox:{x:0,y:0,w:1000,h:760},
+  ignoreRehearsals: localStorage.getItem("bbhub.ignoreRehearsals") === "1",
+  guestBandFilter: JSON.parse(localStorage.getItem("bbhub.guestBandFilter") || "[]")
 };
 
 function $(id){ return document.getElementById(id); }
@@ -23,6 +24,15 @@ function nowHeaderText(){
 function getInitials(name){
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   return (parts[0]?.[0] || "B") + (parts[1]?.[0] || parts[0]?.[1] || "B");
+}
+function stageMemberLabel(member){
+  if(!member) return "vacant";
+  const first = String(member.first_name || "").trim();
+  const display = String(member.display_name || [member.first_name, member.last_name].filter(Boolean).join(" ") || "").trim();
+  const parts = display.split(/\s+/).filter(Boolean);
+  const surnameInitial = member.last_name?.trim()?.[0] || (parts.length > 1 ? parts[parts.length - 1][0] : "");
+  const base = first || parts[0] || member.member_id || "player";
+  return `${base}${surnameInitial ? surnameInitial.toUpperCase() : ""}`;
 }
 function updateGreeting(){
   const pill = $("greetingPill");
@@ -105,6 +115,17 @@ function getEventProgramRows(event){
   const progId = event.program_id || event.event_id || "";
   return (state.program || []).filter(r => String(r.program_id || r.event_id || "") === String(progId)).sort((a,b)=>Number(a.piece_order||999)-Number(b.piece_order||999));
 }
+function renderProgramItems(detailRows, detailTitle, event){
+  if(!detailRows.length){
+    return `<div class="progItem"><div class="progTitle">${event.notes ? escapeHtml(event.notes) : `No ${detailTitle.toLowerCase()} loaded.`}</div></div>`;
+  }
+  return detailRows.map(r => {
+    const yt = String(r.youtube || r.youtube_url || r.url || "").trim();
+    const meta = [r.composer, r.arranger, r.notes].filter(Boolean).join(" — ");
+    return `<div class="progItem"><div class="progTitleRow"><div class="progTitle">${escapeHtml(r.piece_order)}. ${escapeHtml(r.piece_name || r.title || "")}</div>${yt ? `<a class="progYoutubeLink" href="${escapeHtml(yt)}" target="_blank" rel="noopener" title="Open YouTube"><span class="material-symbols-outlined">smart_display</span></a>` : ``}</div><div class="progMeta">${escapeHtml(meta)}</div></div>`;
+  }).join("");
+}
+
 function getUpcomingEvents(){
   return (state.events || [])
     .map(normalizeEvent)
@@ -143,6 +164,123 @@ function renderSavedResponseMeta(resp){
   const who = escapeHtml(getInitials(state.session.display_name || [state.session.first_name, state.session.last_name].filter(Boolean).join(" ") || "Member").toUpperCase());
   return `<div class="responseSavedMeta"><span class="avatarCircle avatarCircle--tiny">${who}</span><span>You’re ${escapeHtml(labelForStatus(resp.status))}${when ? ` · updated ${escapeHtml(when)}` : ""}${exact ? ` · ${escapeHtml(exact)}` : ""}</span></div>`;
 }
+
+function getMemberBands(member){
+  return String(member?.bands || "")
+    .split("|")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+function currentMember(){
+  return state.session ? memberById(state.session.member_id) : null;
+}
+function eventBandType(event){ return String(event?.band_type || "").trim(); }
+function eventBandLabel(event){
+  const bt = eventBandType(event);
+  const found = (state.bands || []).find(b => String(b.band_type||"").trim() === bt);
+  return found?.band_label || bt || "All Bands";
+}
+function eventBandColour(event){
+  const bt = eventBandType(event);
+  const found = (state.bands || []).find(b => String(b.band_type||"").trim() === bt);
+  return found?.colour || "#e5e7eb";
+}
+function bandTextColour(colour){
+  const c = String(colour || "").trim().toLowerCase();
+  if(!c) return "#111827";
+  const darkNames = new Set(["navy","purple","blue","red","teal","maroon","indigo","brown","black"]);
+  if(darkNames.has(c)) return "#ffffff";
+  if(c[0] === "#"){
+    let hex = c.slice(1);
+    if(hex.length === 3) hex = hex.split("").map(ch => ch + ch).join("");
+    if(hex.length === 6){
+      const r = parseInt(hex.slice(0,2), 16);
+      const g = parseInt(hex.slice(2,4), 16);
+      const b = parseInt(hex.slice(4,6), 16);
+      const luminance = (0.2126*r + 0.7152*g + 0.0722*b) / 255;
+      return luminance < 0.58 ? "#ffffff" : "#111827";
+    }
+  }
+  return "#111827";
+}
+function buildCardBandLabel(baseLabel, event){
+  const bandLabel = eventBandLabel(event);
+  const upperBand = String(bandLabel || '').toUpperCase();
+  if(baseLabel === "NEXT GIG") return `NEXT ${upperBand} GIG`;
+  if(baseLabel === "NEXT REHEARSAL") return `NEXT ${upperBand} REHEARSAL`;
+  return upperBand ? `${baseLabel} · ${upperBand}` : baseLabel;
+}
+
+function bandChipStyle(colour){
+  const bg = String(colour || "#e5e7eb").trim() || "#e5e7eb";
+  const fg = bandTextColour(bg);
+  return `--band-colour:${escapeHtml(bg)};--band-text:${escapeHtml(fg)};background-color:${escapeHtml(bg)} !important;color:${escapeHtml(fg)} !important;border:1px solid rgba(17,24,39,.14) !important;`;
+}
+function getAvailableBandTypes(){
+  return (state.bands || []).map(b => String(b.band_type || "").trim()).filter(Boolean);
+}
+function getGuestBandFilter(){
+  const available = getAvailableBandTypes();
+  const selected = (Array.isArray(state.guestBandFilter) ? state.guestBandFilter : [])
+    .map(v => String(v || "").trim())
+    .filter(v => available.includes(v));
+  return selected.length ? selected : available;
+}
+function saveGuestBandFilter(values){
+  state.guestBandFilter = Array.from(new Set((values || []).map(v => String(v || "").trim()).filter(Boolean)));
+  localStorage.setItem("bbhub.guestBandFilter", JSON.stringify(state.guestBandFilter));
+}
+function eventsVisibleToCurrentUser(events){
+  const member = currentMember();
+  if(!member){
+    const bands = getGuestBandFilter();
+    if(!bands.length) return events || [];
+    return (events || []).filter(e => {
+      const bt = eventBandType(e);
+      return !bt || bands.includes(bt);
+    });
+  }
+  const bands = getMemberBands(member);
+  if(!bands.length) return events;
+  return (events || []).filter(e => {
+    const bt = eventBandType(e);
+    return !bt || bands.includes(bt);
+  });
+}
+function chairsForEvent(event){
+  const bt = eventBandType(event);
+  return state.bandChairs.map(normalizeChair).filter(ch => !bt || String(ch.band_type || "").trim() === bt).sort((a,b)=>a.order-b.order);
+}
+function assignmentsForEvent(eventOrId){
+  const event = typeof eventOrId === "string" ? (state.events || []).find(e => String(e.event_id) === String(eventOrId)) : eventOrId;
+  const eventId = typeof eventOrId === "string" ? eventOrId : event?.event_id;
+  const bt = eventBandType(event);
+  return state.assignments.map(normalizeAssignment).filter(a => String(a.event_id) === String(eventId) && (!bt || String(a.band_type || "").trim() === bt));
+}
+function findNextByBand(events, type){
+  const map = new Map();
+  (events || [])
+    .filter(e => e.type === type && e.parsed instanceof Date && !Number.isNaN(+e.parsed) && e.parsed >= new Date())
+    .sort((a,b)=>a.parsed-b.parsed)
+    .forEach(e => {
+      const key = eventBandType(e) || "_all";
+      if(!map.has(key)) map.set(key, e);
+    });
+  return [...map.values()];
+}
+function gigStrengthAlert(event){
+  const chairs = chairsForEvent(event).filter(ch => !ch.is_optional);
+  const assignments = assignmentsForEvent(event);
+  const open = chairs.filter(ch => !assignments.some(a => String(a.chair_code) === String(ch.chair_code)));
+  if(!chairs.length) return "";
+  const toneClass = open.length ? "" : " ok";
+  const icon = open.length ? "warning" : "check_circle";
+  const text = open.length
+    ? `Players needed — ${open.slice(0, 5).map(ch => ch.display_short || ch.chair_code || ch.chair_label).join(" · ")}${open.length > 5 ? ` +${open.length - 5} more` : ""}`
+    : `Band strength good. All core chairs are currently filled.`;
+  return `<div class="eventInlineAlert${toneClass}"><span class="material-symbols-outlined">${icon}</span><span class="eventInlineAlert__text"><a href="#" class="inlineAlertDetailsLink" data-open-details="${escapeHtml(event.event_id)}">${escapeHtml(text)}</a></span></div>`;
+}
+
 function renderEventCard(host, label, event, emptyText){
   if(!event){ host.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`; return; }
 
@@ -157,6 +295,7 @@ function renderEventCard(host, label, event, emptyText){
   const detailRows = getEventProgramRows(event);
   const detailTitle = event.type === "gig" ? "Program" : "Focus";
   const attireText = event.uniform || (event.type === "rehearsal" ? "Bring music / casual" : "TBC");
+  const cardBandLabel = buildCardBandLabel(label, event);
 
   host.innerHTML = `
     <div class="compactCard eventCard eventCard--${theme} ${label === "NEXT GIG" ? "eventCard--hero" : ""}" data-event-id="${escapeHtml(event.event_id)}">
@@ -165,8 +304,10 @@ function renderEventCard(host, label, event, emptyText){
           <span class="material-symbols-outlined compactCard__icon">${event.type === "rehearsal" ? "music_note" : "celebration"}</span>
           <span class="compactCard__title">${escapeHtml(event.title)}</span>
         </div>
-        ${state.session ? renderResponseMatrix(event.event_id, status, response) : `<button class="pillBtn loginPromptBtn" data-open-login="1">Login to RSVP</button>`}
+        ${state.session ? renderResponseMatrix(event.event_id, status, response) : `<button class="pillBtn loginPromptBtn" data-open-login="1"><span class="material-symbols-outlined">how_to_reg</span><span>RSVP</span></button>`}
       </div>
+      ${event.notes ? `<div class="eventNote"><span class="material-symbols-outlined">priority_high</span><div class="eventNote__text">${escapeHtml(event.notes)}</div></div>` : ``}
+      ${event.type === "gig" ? gigStrengthAlert(event) : ``}
       <div class="compactCard__row">
         <div class="compactCard__left">
           <span class="material-symbols-outlined compactCard__icon">schedule</span>
@@ -185,17 +326,11 @@ function renderEventCard(host, label, event, emptyText){
           <span class="material-symbols-outlined compactCard__icon">checkroom</span>
           <span class="compactCard__metaText">${escapeHtml(attireText)}</span>
         </div>
-        <span class="themePill">${escapeHtml(label)}</span>
+        <span class="themePill" style="${bandChipStyle(eventBandColour(event))}">${escapeHtml(cardBandLabel)}</span>
       </div>
       <details class="cardDetails">
         <summary><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle">expand_more</span> Details</summary>
         <div class="cardDetails__grid">
-          <div>
-            <div class="label">${detailTitle}</div>
-            <div class="progList">
-              ${detailRows.length ? detailRows.map(r => `<div class="progItem"><div class="progTitle">${escapeHtml(r.piece_order)}. ${escapeHtml(r.piece_name || r.title || "")}</div><div class="progMeta">${escapeHtml([r.composer, r.arranger, r.notes].filter(Boolean).join(" — "))}</div></div>`).join("") : `<div class="progItem"><div class="progTitle">${event.notes ? escapeHtml(event.notes) : `No ${detailTitle.toLowerCase()} loaded.`}</div></div>`}
-            </div>
-          </div>
           <div>
             <div class="label">Stage layout</div>
             <div class="inlineStageToolbar">
@@ -203,6 +338,12 @@ function renderEventCard(host, label, event, emptyText){
               <span class="inlineStageHint">Swimlane preview</span>
             </div>
             <div class="inlineStageBox" id="stage-preview-${escapeHtml(event.event_id)}"></div>
+          </div>
+          <div>
+            <div class="label">${detailTitle}</div>
+            <div class="progList">
+              ${renderProgramItems(detailRows, detailTitle, event)}
+            </div>
           </div>
           ${state.session ? `
             <div>
@@ -236,69 +377,150 @@ function renderResponseMatrix(eventId, status, response){
   `;
 }
 
-function renderPlayersNeeded(nextGig){
-  const bar = $("playersNeededBar");
-  if(!nextGig){ bar.className = "alertBar hidden"; bar.innerHTML = ""; return; }
-  const chairs = state.bandChairs.map(normalizeChair).filter(ch => !ch.is_optional);
-  const assignments = state.assignments.map(normalizeAssignment).filter(a => String(a.event_id) === String(nextGig.event_id));
-  const open = chairs.filter(ch => !assignments.some(a => String(a.chair_code) === String(ch.chair_code)));
-  if(!open.length){
-    bar.className = "alertBar ok";
-    bar.innerHTML = `<span class="material-symbols-outlined">check_circle</span><span>Band strength good for ${escapeHtml(nextGig.title)}. All core chairs are filled in the current layout.</span>`;
+
+function renderHeroBandChips(){
+  const host = $("heroBandChips");
+  if(!host) return;
+  const bands = (state.bands || [])
+    .slice()
+    .sort((a,b)=>Number(a.sort_order || 999) - Number(b.sort_order || 999));
+  if(!bands.length){
+    host.innerHTML = '';
     return;
   }
-  const names = open.slice(0, 5).map(ch => ch.display_short || ch.chair_code || ch.chair_label).join(" · ");
-  bar.className = "alertBar";
-  bar.innerHTML = `<span class="material-symbols-outlined">warning</span><span>Players needed for ${escapeHtml(nextGig.title)} — ${escapeHtml(names)}${open.length > 5 ? ` +${open.length - 5} more` : ""}</span>`;
+  const member = currentMember();
+  if(!member){
+    host.classList.add('heroChips--guest');
+    const selected = new Set(getGuestBandFilter());
+    host.innerHTML = bands.map(b => {
+      const bg = b.colour || '#e5e7eb';
+      const label = b.band_label || b.band_type || 'Band';
+      const bt = String(b.band_type || '').trim();
+      const checked = selected.has(bt) ? 'checked' : '';
+      return `<label class="heroChip heroChip--band heroChip--check" style="${bandChipStyle(bg)}"><input type="checkbox" class="heroBandCheck" data-band-type="${escapeHtml(bt)}" ${checked}><span>${escapeHtml(label)}</span></label>`;
+    }).join('');
+    return;
+  }
+  host.classList.remove('heroChips--guest');
+  host.innerHTML = bands.map(b => {
+    const bg = b.colour || '#e5e7eb';
+    const label = b.band_label || b.band_type || 'Band';
+    return `<span class="heroChip heroChip--band" style="${bandChipStyle(bg)}">${escapeHtml(label)}</span>`;
+  }).join('');
+}
+
+function renderPlayersNeeded(nextGigs){
+  const bar = $("playersNeededBar");
+  const gigs = Array.isArray(nextGigs) ? nextGigs : (nextGigs ? [nextGigs] : []);
+  if(!gigs.length){ bar.className = "alertStack hidden"; bar.innerHTML = ""; return; }
+
+  const cards = gigs.map(gig => {
+    const chairs = chairsForEvent(gig).filter(ch => !ch.is_optional);
+    const assignments = assignmentsForEvent(gig);
+    const open = chairs.filter(ch => !assignments.some(a => String(a.chair_code) === String(ch.chair_code)));
+    const tone = open.length ? "" : " ok";
+    const icon = open.length ? "warning" : "check_circle";
+    const text = open.length
+      ? `Players needed for ${gig.title} — ${open.slice(0, 5).map(ch => ch.display_short || ch.chair_code || ch.chair_label).join(" · ")}${open.length > 5 ? ` +${open.length - 5} more` : ""}`
+      : `Band strength good for ${gig.title}. All core chairs are filled in the current layout.`;
+    return `<div class="alertBar${tone}"><span class="material-symbols-outlined">${icon}</span><span>${escapeHtml(text)}</span><span class="bandMetaPill" style="${bandChipStyle(eventBandColour(gig))}">${escapeHtml(eventBandLabel(gig))}</span></div>`;
+  });
+
+  bar.className = "alertStack";
+  bar.innerHTML = cards.join("");
 }
 
 function renderActivity(){
   const host = $("activityMatrix");
-  if(!state.session){ host.innerHTML = `<div class="empty">Login to see your participation snapshot.</div>`; return; }
+  if(!host) return;
   const today = new Date();
   today.setHours(0,0,0,0);
-  const start = new Date(today);
-  start.setDate(start.getDate() - 7 * 12 + 1);
-  const dates = [];
-  for(let i = 0; i < 84; i += 1){ const d = new Date(start); d.setDate(start.getDate() + i); dates.push(d); }
-  const eventByDate = new Map(getUpcomingEvents().map(e => [e.date, e]));
-  const months = [];
-  let prevMonth = "";
-  const cells = dates.map(d => {
-    const iso = d.toISOString().slice(0,10);
-    const monthLabel = d.toLocaleDateString(undefined, { month:"short" });
-    if(d.getDay() === 0 && monthLabel !== prevMonth){ months.push(monthLabel); prevMonth = monthLabel; }
-    const ev = eventByDate.get(iso);
-    const resp = ev ? rsvpFor(ev.event_id, state.session.member_id) : null;
-    const cls = resp ? statusClass(resp.status) : (ev ? "none" : "none");
-    const title = ev ? `${ev.title} — ${resp ? labelForStatus(resp.status) : "no response yet"}` : iso;
-    return `<div class="activityCell ${cls}" title="${escapeHtml(title)}"></div>`;
-  }).join("");
+  const end = new Date(today);
+  end.setDate(end.getDate() + 7 * 12);
+
+  const visibleEvents = eventsVisibleToCurrentUser(state.events || [])
+    .map(normalizeEvent)
+    .filter(e => e.parsed instanceof Date && !Number.isNaN(+e.parsed))
+    .filter(e => e.parsed >= today && e.parsed <= end)
+    .sort((a,b) => a.parsed - b.parsed);
+
+  const visibleBands = (state.bands || [])
+    .slice()
+    .sort((a,b)=>Number(a.sort_order || 999) - Number(b.sort_order || 999))
+    .filter(b => {
+      const bt = String(b.band_type || '').trim();
+      return !bt || visibleEvents.some(e => eventBandType(e) === bt);
+    });
+
+  if(!visibleEvents.length){
+    host.innerHTML = `<div class="empty">No rehearsals or gigs found in the next 12 weeks.</div>`;
+    return;
+  }
+
+  const byBand = new Map();
+  visibleEvents.forEach(e => {
+    const bt = eventBandType(e) || '_all';
+    if(!byBand.has(bt)) byBand.set(bt, []);
+    byBand.get(bt).push(e);
+  });
+
+  const orderedBands = visibleBands.length ? visibleBands : [...byBand.keys()].map(bt => ({ band_type:bt, band_label:eventBandLabel({band_type:bt}), colour:eventBandColour({band_type:bt}), sort_order:999 }));
+
   host.innerHTML = `
-    <div class="activityWrap">
-      <div class="activityMonths">${months.map(m => `<span>${escapeHtml(m)}</span>`).join("")}</div>
-      <div class="activityGrid">${cells}</div>
-      <div class="activityLegend"><span>Less</span><div class="activityCell none"></div><div class="activityCell y"></div><div class="activityCell m"></div><div class="activityCell n"></div><span>More signal</span></div>
-    </div>
-  `;
+    <div class="bandScheduleWrap">
+      ${orderedBands.map(band => {
+        const bt = String(band.band_type || '').trim();
+        const items = (byBand.get(bt) || []).sort((a,b) => a.parsed - b.parsed);
+        if(!items.length) return '';
+        const bg = band.colour || '#e5e7eb';
+        const fg = bandTextColour(bg);
+        return `
+          <section class="bandScheduleBlock">
+            <div class="bandScheduleHead">
+              <span class="bandMetaPill" style="${bandChipStyle(bg)}">${escapeHtml(band.band_label || bt || 'Band')}</span>
+              <span class="bandScheduleRange">Next 12 weeks</span>
+            </div>
+            <div class="bandScheduleList">
+              ${items.map(e => {
+                const when = formatEventDateParts(e.date, e.start_time, e.end_time, e.end_date);
+                return `
+                  <article class="bandScheduleItem bandScheduleItem--${escapeHtml(e.type || 'other')}">
+                    <div class="bandScheduleDate">
+                      <div class="bandScheduleDay">${escapeHtml(when.dayLabel)}</div>
+                      <div class="bandScheduleDateText">${escapeHtml(when.dateLabel)}</div>
+                    </div>
+                    <div class="bandScheduleBody">
+                      <div class="bandScheduleTop">
+                        <span class="plannerPill">${escapeHtml(e.type || 'event')}</span>
+                        <span class="bandScheduleTime">${escapeHtml(when.timeLabel || '')}</span>
+                      </div>
+                      <div class="bandScheduleTitle">${escapeHtml(e.title || '')}</div>
+                      <div class="bandScheduleMeta">${escapeHtml(e.venue || '')}</div>
+                    </div>
+                  </article>`;
+              }).join('')}
+            </div>
+          </section>`;
+      }).join('')}
+    </div>`;
 }
 
 function renderStrength(){
   const host = $("strengthMatrix");
-  const events = getFilteredUpcomingEvents().slice(0, 6);
+  const events = eventsVisibleToCurrentUser(getFilteredUpcomingEvents()).slice(0, 6);
   if(!events.length){ host.innerHTML = `<div class="empty">No upcoming events to show.</div>`; return; }
 
-  const chairs = state.bandChairs.map(normalizeChair).filter(ch => !ch.is_optional);
-  const sections = [...new Set(chairs.map(ch => ch.section))];
-  const assignments = state.assignments.map(normalizeAssignment);
+  const sections = [...new Set(
+    events.flatMap(e => chairsForEvent(e).filter(ch => !ch.is_optional).map(ch => ch.section))
+  )];
 
   const header = events.map(e => `<th>${escapeHtml(e.type === "rehearsal" ? "Reh" : "Gig")}<br>${escapeHtml((e.date || "").slice(5))}</th>`).join("");
   const rows = sections.map(section => {
-    const sectionChairs = chairs.filter(ch => ch.section === section);
     const cells = events.map(e => {
-      const eventAssignments = assignments.filter(a => String(a.event_id) === String(e.event_id));
-      const filled = sectionChairs.filter(ch => eventAssignments.some(a => String(a.chair_code) === String(ch.chair_code))).length;
-      const needed = sectionChairs.length || 1;
+      const eventChairs = chairsForEvent(e).filter(ch => !ch.is_optional && ch.section === section);
+      const eventAssignments = assignmentsForEvent(e);
+      const filled = eventChairs.filter(ch => eventAssignments.some(a => String(a.chair_code) === String(ch.chair_code))).length;
+      const needed = eventChairs.length || 1;
       const ratio = filled / needed;
       const cls = ratio >= 1 ? "good" : ratio >= 0.66 ? "warn" : "bad";
       return `<td class="${cls} ${e.type === "rehearsal" ? "dim" : ""}">${filled}/${needed}<span class="strengthSub">${ratio >= 1 ? "good" : ratio >= 0.66 ? "borderline" : "short"}</span></td>`;
@@ -310,25 +532,34 @@ function renderStrength(){
 
 function populateStageEventSelect(){
   const sel = $("stageEventSelect");
-  const items = getUpcomingEvents();
-  sel.innerHTML = items.map(e => `<option value="${escapeHtml(e.event_id)}" ${e.event_id === state.selectedEventId ? "selected" : ""}>${escapeHtml(e.title)}</option>`).join("");
+  const items = eventsVisibleToCurrentUser(getFilteredUpcomingEvents());
+  if(!items.length){
+    sel.innerHTML = "";
+    return;
+  }
+  const ids = new Set(items.map(e => String(e.event_id)));
+  if(!state.selectedEventId || !ids.has(String(state.selectedEventId))) {
+    state.selectedEventId = items[0].event_id;
+  }
+  sel.innerHTML = items.map(e => `<option value="${escapeHtml(e.event_id)}" ${e.event_id === state.selectedEventId ? "selected" : ""}>${escapeHtml(e.title)} · ${escapeHtml(eventBandLabel(e))}</option>`).join("");
 }
 
 
 function setStageMode(mode){
-  state.stageMode = mode || "swimlane";
+  state.stageMode = mode || "table";
+  try{ localStorage.setItem("bbhub.stageMode", state.stageMode); }catch(_e){}
   document.querySelectorAll(".segBtn").forEach(b => b.classList.toggle("active", b.dataset.stageMode === state.stageMode));
   const visual = $("stageVisualWrap");
   const table = $("stageTableWrap");
   if(visual && table){
-    const isTable = state.stageMode === "table";
-    visual.hidden = isTable;
-    table.hidden = !isTable;
+    const visualMode = state.stageMode === "plan";
+    visual.hidden = !visualMode;
+    table.hidden = visualMode;
   }
 }
-function openStageForEvent(eventId, mode = "swimlane"){
+function openStageForEvent(eventId, mode = null){
   state.selectedEventId = eventId || state.selectedEventId;
-  setStageMode(mode);
+  setStageMode(mode || state.stageMode || "table");
   switchView("stage");
   if($("stageEventSelect")) $("stageEventSelect").value = state.selectedEventId;
   renderStage();
@@ -337,28 +568,85 @@ function openStageForEvent(eventId, mode = "swimlane"){
 function hydrateCardStagePreview(eventId){
   const host = document.getElementById(`stage-preview-${eventId}`);
   if(!host) return;
-  host.innerHTML = `<svg class="inlineStageSvg" viewBox="0 0 1000 360" aria-label="Stage preview"></svg>`;
-  const svg = host.querySelector("svg");
-  const chairs = state.bandChairs.map(normalizeChair).sort((a,b)=>a.order - b.order);
-  const assignments = state.assignments.map(normalizeAssignment).filter(a => String(a.event_id) === String(eventId));
-  renderStageSwimlane(svg, chairs, assignments, eventId, {compact:true});
+  const event = (state.events || []).find(e => String(e.event_id) === String(eventId));
+  const chairs = chairsForEvent(event);
+  const assignments = assignmentsForEvent(event);
+  renderInlineSwimlaneTable(host, chairs, assignments, eventId);
+}
+
+
+function renderInlineStageTable(host, chairs, assignments, eventId){
+  if(!host) return;
+  const groupKey = ch => String(ch.lane || ch.section || 'Band').trim() || 'Band';
+  const rows = chairs
+    .sort((a,b)=>Number(a.order||0)-Number(b.order||0))
+    .map(ch => {
+      const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
+      const member = a ? memberById(a.member_id) : null;
+      const status = stageStatus(eventId, member?.member_id);
+      return `<tr class="status-${status.toLowerCase()}"><td>${escapeHtml(groupKey(ch))}</td><td><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td><td><div class="stageName">${escapeHtml(member ? stageMemberLabel(member) : 'Vacant')}</div></td><td><span class="rsvpPill ${statusClass(status)}">${escapeHtml(labelForStatus(status))}</span></td></tr>`;
+    }).join('');
+  host.innerHTML = `<div class="inlineStageTableWrap"><table class="stageTable stageTable--compact"><thead><tr><th>Group</th><th>Chair</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderInlineSwimlaneTable(host, chairs, assignments, eventId){
+  if(!host) return;
+  host.innerHTML = renderSwimlaneTableMarkup(chairs, assignments, eventId, {compact:true});
+}
+
+function renderStageSwimlaneTable(host, chairs, assignments, eventId){
+  if(!host) return;
+  host.innerHTML = renderSwimlaneTableMarkup(chairs, assignments, eventId, {compact:false});
+}
+
+function renderSwimlaneTableMarkup(chairs, assignments, eventId, opts = {}){
+  const compact = !!opts.compact;
+  const laneKey = ch => String(ch.lane || ch.section || 'Band').trim() || 'Band';
+  const rows = chairs
+    .sort((a,b)=>{
+      const ga = laneKey(a).localeCompare(laneKey(b));
+      if(ga) return ga;
+      return Number(a.order||0)-Number(b.order||0);
+    })
+    .map(ch => {
+      const group = laneKey(ch);
+      const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
+      const member = a ? memberById(a.member_id) : null;
+      const status = stageStatus(eventId, member?.member_id);
+      return `<tr class="status-${status.toLowerCase()}"><td>${escapeHtml(group)}</td><td><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td><td><div class="stageName">${escapeHtml(member ? stageMemberLabel(member) : 'Vacant')}</div></td><td><span class="rsvpPill ${statusClass(status)}">${escapeHtml(labelForStatus(status))}</span></td></tr>`;
+    }).join('');
+  return `<div class="swimlaneTableStack ${compact ? 'swimlaneTableStack--compact' : ''}"><div class="swimlaneTableWrap"><table class="stageTable ${compact ? 'stageTable--compact' : ''}"><thead><tr><th>Group</th><th>Chair</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows || `<tr><td colspan="4"><div class="empty">No seating loaded.</div></td></tr>`}</tbody></table></div></div>`;
+}
+
+function updateStageHeading(event){
+  const labelEl = document.querySelector('#view-stage .label');
+  const titleEl = document.querySelector('#view-stage h2');
+  const bandLabel = event ? eventBandLabel(event) : 'Band';
+  if(labelEl) labelEl.textContent = `Stage layout · ${bandLabel}`;
+  if(titleEl) titleEl.textContent = event ? `Band seating — ${bandLabel}` : 'Band seating';
 }
 
 function renderStage(){
-  const eventId = $("stageEventSelect").value || state.selectedEventId;
+  const select = $("stageEventSelect");
+  const eventId = select?.value || state.selectedEventId;
   const svg = $("stageSvg");
   const tableWrap = $("stageTableWrap");
   svg.innerHTML = "";
-  const chairs = state.bandChairs.map(normalizeChair).sort((a,b)=>a.order - b.order);
-  const assignments = state.assignments.map(normalizeAssignment).filter(a => String(a.event_id) === String(eventId));
+  const event = (state.events || []).find(e => String(e.event_id) === String(eventId));
+  if(event){
+    state.selectedEventId = event.event_id;
+    if(select && select.value !== state.selectedEventId) select.value = state.selectedEventId;
+  }
+  updateStageHeading(event);
+  const chairs = chairsForEvent(event);
+  const assignments = assignmentsForEvent(event);
 
   if(state.stageMode === "table"){
-    renderStageTable(tableWrap, chairs, assignments, eventId);
+    renderStageTable(tableWrap, chairs, assignments, state.selectedEventId);
   }else if(state.stageMode === "swimlane"){
-    renderStageSwimlane(svg, chairs, assignments, eventId);
-    applyStageViewBox();
+    renderStageSwimlaneTable(tableWrap, chairs, assignments, state.selectedEventId);
   }else{
-    renderStagePlan(svg, chairs, assignments, eventId);
+    renderStagePlan(svg, chairs, assignments, state.selectedEventId);
     applyStageViewBox();
   }
 }
@@ -387,7 +675,7 @@ function renderStagePlan(svg, chairs, assignments, eventId){
     t1.setAttribute("text-anchor","middle"); t1.setAttribute("y","-5"); t1.setAttribute("font-size","11"); t1.setAttribute("font-weight","800"); t1.textContent = ch.display_short;
     const t2 = document.createElementNS("http://www.w3.org/2000/svg","text");
     t2.setAttribute("text-anchor","middle"); t2.setAttribute("y","12"); t2.setAttribute("font-size","12"); t2.setAttribute("font-weight","800");
-    t2.textContent = member ? ((member.first_name?.[0]||"") + (member.last_name?.[0]||"")).toUpperCase() : "--";
+    t2.textContent = stageMemberLabel(member);
     const title = document.createElementNS("http://www.w3.org/2000/svg","title");
     title.textContent = `${ch.chair_label}\n${member ? member.display_name || "" : "Vacant"}\n${labelForStatus(status)}`;
     g.append(c, t1, t2, title); svg.appendChild(g);
@@ -421,7 +709,7 @@ function renderStageSwimlane(svg, chairs, assignments, eventId, opts = {}){
       const t = document.createElementNS("http://www.w3.org/2000/svg","text");
       t.setAttribute("text-anchor","middle"); t.setAttribute("font-size", compact ? "10" : "11"); t.setAttribute("font-weight","800"); t.setAttribute("y", compact ? "-1" : "-2"); t.textContent = ch.display_short;
       const t2 = document.createElementNS("http://www.w3.org/2000/svg","text");
-      t2.setAttribute("text-anchor","middle"); t2.setAttribute("font-size", compact ? "9" : "10"); t2.setAttribute("y", compact ? "11" : "12"); t2.textContent = member ? (member.first_name || "") : "vacant";
+      t2.setAttribute("text-anchor","middle"); t2.setAttribute("font-size", compact ? "9" : "10"); t2.setAttribute("y", compact ? "11" : "12"); t2.textContent = stageMemberLabel(member);
       const title = document.createElementNS("http://www.w3.org/2000/svg","title");
       title.textContent = `${ch.chair_label}\n${member ? member.display_name || "" : "Vacant"}`;
       g.append(rect, t, t2, title); svg.appendChild(g);
@@ -432,13 +720,20 @@ function renderStageSwimlane(svg, chairs, assignments, eventId, opts = {}){
 
 function renderStageTable(host, chairs, assignments, eventId){
   if(!host) return;
-  const rows = chairs.map(ch => {
-    const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
-    const member = a ? memberById(a.member_id) : null;
-    const status = stageStatus(eventId, member?.member_id);
-    return `<tr class="status-${status.toLowerCase()}"><td><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span><div class="stageSub">${escapeHtml(ch.section || '')}</div></td><td><div class="stageName">${escapeHtml(ch.chair_label || '')}</div><div class="stageSub">${escapeHtml(ch.lane || '')}</div></td><td>${member ? `<div class="stageName">${escapeHtml(member.display_name || `${member.first_name||''} ${member.last_name||''}`.trim())}</div><div class="stageSub">${escapeHtml(member.member_id || '')}</div>` : `<span class="stageSub">Vacant</span>`}</td><td><span class="rsvpPill ${statusClass(status)}">${escapeHtml(labelForStatus(status))}</span></td></tr>`;
-  }).join('');
-  host.innerHTML = `<div class="strengthWrap"><table class="stageTable"><thead><tr><th>Chair</th><th>Position</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const groupKey = ch => String(ch.lane || ch.section || 'Band').trim() || 'Band';
+  const rows = chairs
+    .sort((a,b)=>{
+      const ga = groupKey(a).localeCompare(groupKey(b));
+      if(ga) return ga;
+      return Number(a.order||0)-Number(b.order||0);
+    })
+    .map(ch => {
+      const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
+      const member = a ? memberById(a.member_id) : null;
+      const status = stageStatus(eventId, member?.member_id);
+      return `<tr class="status-${status.toLowerCase()}"><td>${escapeHtml(groupKey(ch))}</td><td><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td><td><div class="stageName">${escapeHtml(member ? stageMemberLabel(member) : 'Vacant')}</div></td><td><span class="rsvpPill ${statusClass(status)}">${escapeHtml(labelForStatus(status))}</span></td></tr>`;
+    }).join('');
+  host.innerHTML = `<div class="strengthWrap"><table class="stageTable"><thead><tr><th>Group</th><th>Chair</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function applyStageViewBox(){ const svg=$("stageSvg"); if(svg) svg.setAttribute("viewBox", `${state.stageViewBox.x} ${state.stageViewBox.y} ${state.stageViewBox.w} ${state.stageViewBox.h}`); }
 function resetStageView(){ state.stageViewBox = {x:0,y:0,w:1000,h:760}; applyStageViewBox(); }
@@ -457,17 +752,28 @@ function renderPlanner(){
   if(!items.length){ host.innerHTML = `<div class="empty">No events found.</div>`; return; }
   host.innerHTML = items.map(e => {
     const when = formatEventDateParts(e.date, e.start_time, e.end_time, e.end_date);
-    return `<div class="plannerItem plannerItem--${escapeHtml(e.type || "other")}"><div class="plannerTop"><span class="plannerPill">${escapeHtml(e.type || "event")}</span><span class="plannerWhen">${escapeHtml(when.dayLabel)} · ${escapeHtml(when.dateLabel)} · ${escapeHtml(when.timeLabel || "")}</span></div><div class="plannerTitle">${escapeHtml(e.title)}</div><div class="plannerMeta">${escapeHtml(e.venue || "")}</div></div>`;
+    return `<div class="plannerItem plannerItem--${escapeHtml(e.type || "other")}"><div class="plannerTop"><span class="plannerPill">${escapeHtml(e.type || "event")}</span><span class="plannerBandPill" style="${bandChipStyle(eventBandColour(e))}">${escapeHtml(eventBandLabel(e))}</span><span class="plannerWhen">${escapeHtml(when.dayLabel)} · ${escapeHtml(when.dateLabel)} · ${escapeHtml(when.timeLabel || "")}</span></div><div class="plannerTitle">${escapeHtml(e.title)}</div>${e.notes ? `<div class="plannerNote"><span class="material-symbols-outlined">priority_high</span><span>${escapeHtml(e.notes)}</span></div>` : ``}<div class="plannerMeta">${escapeHtml(e.venue || "")}</div></div>`;
   }).join("");
 }
 
 function renderHome(){
-  const nextGig = findNext(state.events, "gig");
-  const nextReh = findNext(state.events, "rehearsal");
-  state.selectedEventId = nextGig?.event_id || nextReh?.event_id || "";
-  renderPlayersNeeded(nextGig);
-  renderEventCard($("nextGigCard"), "NEXT GIG", nextGig, "No upcoming gigs found.");
-  renderEventCard($("nextRehCard"), "NEXT REHEARSAL", nextReh, "No upcoming rehearsals found.");
+  const visibleEvents = eventsVisibleToCurrentUser(state.events);
+  const nextGigs = findNextByBand(visibleEvents, "gig");
+  const nextRehs = findNextByBand(visibleEvents, "rehearsal");
+  const nextGig = nextGigs[0] || null;
+  const nextReh = nextRehs[0] || null;
+  const visibleIds = new Set(visibleEvents.map(e => String(e.event_id)));
+  if(!state.selectedEventId || !visibleIds.has(String(state.selectedEventId))){
+    state.selectedEventId = nextGig?.event_id || nextReh?.event_id || "";
+  }
+  renderHeroBandChips();
+  const alertBar = $("playersNeededBar"); if(alertBar){ alertBar.className = "alertStack hidden"; alertBar.innerHTML = ""; }
+  const gigHost = $("nextGigCard");
+  const rehHost = $("nextRehCard");
+  gigHost.innerHTML = nextGigs.length ? nextGigs.map(e => `<div class="multiEventSlot" data-event-slot="${escapeHtml(e.event_id)}"></div>`).join("") : `<div class="empty">No upcoming gigs found.</div>`;
+  rehHost.innerHTML = nextRehs.length ? nextRehs.map(e => `<div class="multiEventSlot" data-event-slot="${escapeHtml(e.event_id)}"></div>`).join("") : `<div class="empty">No upcoming rehearsals found.</div>`;
+  nextGigs.forEach(e => renderEventCard(gigHost.querySelector(`[data-event-slot="${CSS.escape(e.event_id)}"]`), "NEXT GIG", e, "No upcoming gigs found."));
+  nextRehs.forEach(e => renderEventCard(rehHost.querySelector(`[data-event-slot="${CSS.escape(e.event_id)}"]`), "NEXT REHEARSAL", e, "No upcoming rehearsals found."));
   renderActivity();
   renderStrength();
   populateStageEventSelect();
@@ -499,6 +805,22 @@ async function persistRsvp(eventId, status){
 }
 
 function bindHomeDelegates(){
+  document.addEventListener("change", (ev) => {
+    const bandCheck = ev.target.closest(".heroBandCheck");
+    if(bandCheck && !currentMember()){
+      const selected = Array.from(document.querySelectorAll(".heroBandCheck:checked")).map(el => el.dataset.bandType).filter(Boolean);
+      if(!selected.length){
+        bandCheck.checked = true;
+        return;
+      }
+      saveGuestBandFilter(selected);
+      renderHome();
+      if(document.querySelector("#view-stage.active")) renderStage();
+      if(document.querySelector("#view-planner.active")) renderPlanner();
+      return;
+    }
+  });
+
   document.addEventListener("click", async (ev) => {
     const loginBtn = ev.target.closest(".loginPromptBtn");
     if(loginBtn){ $("loginDialog").showModal(); return; }
@@ -515,7 +837,18 @@ function bindHomeDelegates(){
 
     const openStageBtn = ev.target.closest(".openStageBtn");
     if(openStageBtn){
-      openStageForEvent(openStageBtn.dataset.openStage || "", "swimlane");
+      openStageForEvent(openStageBtn.dataset.openStage || "", "table");
+      return;
+    }
+
+    const detailsBtn = ev.target.closest(".inlineAlertDetailsBtn, .inlineAlertDetailsLink");
+    if(detailsBtn){
+      const card = detailsBtn.closest('.eventCard');
+      const details = card?.querySelector('.cardDetails');
+      if(details){
+        details.open = true;
+        details.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      }
       return;
     }
 
@@ -529,6 +862,7 @@ function bindHomeDelegates(){
       const result = await persistRsvp(eventId, active.dataset.status || "");
       if(msg) msg.textContent = result.ok ? `Saved response: ${labelForStatus(active.dataset.status || "")}` : `Save failed: ${result.message}`;
       renderHome();
+    const dlg = $("loginDialog"); if(dlg?.open) dlg.close();
       if(document.querySelector("#view-stage.active")) renderStage();
       if(DEBUG) renderDebugPanel(state);
     }
@@ -541,7 +875,7 @@ function bindLoginUi(){
     const key = $("loginKeyInput").value;
     const member = Auth.findByLoginKey(state.members, key);
     const box = $("loginResult");
-    if(!member){ box.className = "loginResult muted"; box.textContent = "No member matched that login name."; return; }
+    if(!member){ box.className = "loginResult muted"; box.textContent = "No member matched that code."; return; }
     Auth.saveUser(member);
     state.session = Auth.loadUser();
     updateGreeting();
@@ -549,6 +883,7 @@ function bindLoginUi(){
     box.className = "loginResult";
     box.innerHTML = `Welcome <strong>${escapeHtml(member.first_name || member.display_name || "Member")}</strong> (${escapeHtml(member.member_id)})`;
     renderHome();
+    renderPlanner();
   });
   $("logoutBtn").addEventListener("click", () => {
     Auth.clearUser();
@@ -557,6 +892,7 @@ function bindLoginUi(){
     $("loginResult").className = "loginResult muted";
     $("loginResult").textContent = "Logged out.";
     renderHome();
+    renderPlanner();
   });
 }
 
@@ -615,6 +951,7 @@ async function start(){
     state.rsvp = data.rsvp || [];
     state.bandChairs = data.bandChairs || [];
     state.assignments = data.assignments || [];
+    state.bands = data.bands || [];
     updateSummary();
     setStatus(`Loaded (${state.source}) — ${new Date().toLocaleString()}`);
     renderHome();

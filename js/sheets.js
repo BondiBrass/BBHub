@@ -1,9 +1,13 @@
 import { BBHUB_CONFIG } from "./config.js";
 
 const demo = {
+  Bands: [
+    {band_type:"main", band_label:"Main Brass Band", sort_order:1, colour:"gold"},
+    {band_type:"bigband", band_label:"Big Band", sort_order:2, colour:"purple"}
+  ],
   Members: [
-    {member_id:"m001", first_name:"Roy", last_name:"Hill", display_name:"Roy Hill", login_key:"roy.hill", instrument:"Cornet", email:"roy@example.org"},
-    {member_id:"m002", first_name:"Jess", last_name:"Lee", display_name:"Jess Lee", login_key:"jess.lee", instrument:"Cornet", email:"jess@example.org"},
+    {member_id:"m001", first_name:"Roy", last_name:"Hill", display_name:"Roy Hill", login_key:"roy.hill", instrument:"Cornet", email:"roy@example.org", bands:"main|bigband"},
+    {member_id:"m002", first_name:"Jess", last_name:"Lee", display_name:"Jess Lee", login_key:"jess.lee", instrument:"Cornet", email:"jess@example.org", bands:"main"},
     {member_id:"m003", first_name:"Sam", last_name:"Ng", display_name:"Sam Ng", login_key:"sam.ng", instrument:"Baritone", email:"sam@example.org"},
     {member_id:"m004", first_name:"Alex", last_name:"Tran", display_name:"Alex Tran", login_key:"alex.tran", instrument:"Soprano", email:"alex@example.org"},
     {member_id:"m005", first_name:"Sarah", last_name:"Pike", display_name:"Sarah Pike", login_key:"sarah.pike", instrument:"Horn", email:"sarah@example.org"},
@@ -77,7 +81,7 @@ function getApiBase(){
 export async function loadData(){
   const api = getApiBase();
   if(!api){
-    return { source:"demo", members:demo.Members, rawEvents:demo.Events, events:demo.Events, program:demo.Program, pieces:demo.Pieces, rsvp:demo.RSVP, bandChairs:demo.BandChairs, assignments:demo.Assignments };
+    return { source:"demo", members:demo.Members, rawEvents:demo.Events, events:demo.Events, program:demo.Program, pieces:demo.Pieces, rsvp:demo.RSVP, bandChairs:demo.BandChairs, assignments:demo.Assignments, bands: demo.Bands };
   }
   const url = api.includes("?") ? `${api}&view=all` : `${api}?view=all`;
   const res = await fetch(url, { cache:"no-store" });
@@ -91,8 +95,9 @@ export async function loadData(){
     program: json.Program || [],
     pieces: json.Pieces || [],
     rsvp: json.RSVP || [],
-    bandChairs: json.BandChairs || [],
-    assignments: json.Assignments || []
+    bandChairs: json.BandChairs || json.Chairs || [],
+    assignments: json.Assignments || [],
+    bands: json.Bands || []
   };
 }
 

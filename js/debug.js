@@ -11,7 +11,16 @@ export function normalizeSheetDate(value) {
   let m = s.match(/^(\d{4}-\d{2}-\d{2})[T\s]/);
   if (m) return m[1];
   m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) return `${m[3]}-${pad2(m[2])}-${pad2(m[1])}`;
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const year = m[3];
+    if (a > 12 && b <= 12) return `${year}-${pad2(b)}-${pad2(a)}`;
+    if (b > 12 && a <= 12) return `${year}-${pad2(a)}-${pad2(b)}`;
+    return `${year}-${pad2(b)}-${pad2(a)}`;
+  }
+  m = s.match(/^(\d{2})-(\d{2})-(\d{2})$/);
+  if (m) return `20${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
   return s;
 }
 
@@ -52,6 +61,8 @@ export function splitDateTime(value) {
   let m = s.match(/^(\d{4}-\d{1,2}-\d{1,2})[T\s](\d{1,2}:\d{2})(?::\d{2})?$/);
   if (m) return { date: normalizeSheetDate(m[1]), time: normalizeSheetTime(m[2]) };
   m = s.match(/^(\d{1,2}\/\d{1,2}\/\d{4})[T\s](\d{1,2}:\d{2})(?::\d{2})?$/);
+  if (m) return { date: normalizeSheetDate(m[1]), time: normalizeSheetTime(m[2]) };
+  m = s.match(/^(\d{2}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})(?::\d{2})?$/);
   if (m) return { date: normalizeSheetDate(m[1]), time: normalizeSheetTime(m[2]) };
   return { date: normalizeSheetDate(s), time: normalizeSheetTime(s) };
 }

@@ -20,6 +20,11 @@
 
     <nav class="sideNav">
       <button class="navBtn active" data-view="home"><span class="material-symbols-outlined">home</span><span>Home</span></button>
+      <div class="menuGroupLabel">Band tools</div>
+      <a class="navBtn navBtn--link" href="https://bondibrass.github.io/band-history-utils/" target="_blank" rel="noopener"><span class="material-symbols-outlined">history_edu</span><span>Band History</span></a>
+      <a class="navBtn navBtn--link" href="https://bondibrass.github.io/libraryproto" target="_blank" rel="noopener"><span class="material-symbols-outlined">library_music</span><span>Library</span></a>
+      <a class="navBtn navBtn--link" href="https://bondibrass.github.io/musicreview/" target="_blank" rel="noopener"><span class="material-symbols-outlined">new_releases</span><span>Review Music</span></a>
+      <div class="menuGroupLabel">BBHub</div>
       <button class="navBtn" data-view="stage"><span class="material-symbols-outlined">stadia_controller</span><span>Stage Layout</span></button>
       <button class="navBtn" data-view="library"><span class="material-symbols-outlined">library_music</span><span>Band Library</span></button>
       <button class="navBtn" data-view="planner"><span class="material-symbols-outlined">event_note</span><span>Planner</span></button>
@@ -57,19 +62,13 @@
         </div>
         <div class="hero__content">
           <div class="label label--accent">Bondi Brass Hub</div>
-          <h2>Music, gigs, rehearsals — all in one hub.</h2>
-          <p class="heroText heroText--tagline">No auditions. Just turn up and play.</p>
-          <p class="heroText">See what’s coming up, book yourself into gigs, and get a feel for the band before you even walk through the door.</p>
+          <h2>See what’s coming up.</h2>
+          <p class="heroText heroText--tagline">Press the hamburger for other facilities.</p>
+          <p class="heroText">Quickly check the next gig, RSVP, and see any important notes before you head out the door.</p>
           <div class="heroActions">
             <button class="primaryBtn heroBtn" data-go-view="planner"><span class="material-symbols-outlined">event_note</span><span>See what’s coming up</span></button>
           </div>
-          <div class="heroChips">
-            <span class="heroChip">Next Gig</span>
-            <span class="heroChip">Band Strength</span>
-            <span class="heroChip">Planner</span>
-            <span class="heroChip">Stage Layout</span>
-            <span class="heroChip">Band Library</span>
-          </div>
+          <div id="heroBandChips" class="heroChips"></div>
         </div>
       </section>
 
@@ -83,22 +82,30 @@
       <section class="card">
         <div class="sectionHead">
           <div>
-            <div class="label">Your Activity</div>
-            <h2>Participation snapshot</h2>
+            <div class="label">Upcoming 12 weeks</div>
+            <h2>Rehearsals and gigs by band</h2>
           </div>
         </div>
         <div id="activityMatrix" class="empty">Loading…</div>
       </section>
 
       <section class="card">
-        <div class="sectionHead sectionHead--stack-mobile">
-          <div>
-            <div class="label">Band Strength</div>
-            <h2>Upcoming coverage</h2>
+        <details class="accordionCard" id="strengthAccordion">
+          <summary class="accordionSummary">
+            <div>
+              <div class="label">Band Strength</div>
+              <h2>Upcoming coverage</h2>
+            </div>
+            <span class="material-symbols-outlined accordionIcon">expand_more</span>
+          </summary>
+          <div class="accordionBody">
+            <div class="sectionHead sectionHead--stack-mobile sectionHead--inlineToggle">
+              <div class="muted">Open to check chair coverage across the next events.</div>
+              <label class="togglePill"><input type="checkbox" id="ignoreRehearsalsToggle" /> <span>Ignore rehearsals</span></label>
+            </div>
+            <div id="strengthMatrix" class="empty">Loading…</div>
           </div>
-          <label class="togglePill"><input type="checkbox" id="ignoreRehearsalsToggle" /> <span>Ignore rehearsals</span></label>
-        </div>
-        <div id="strengthMatrix" class="empty">Loading…</div>
+        </details>
       </section>
     </section>
 
@@ -113,8 +120,8 @@
           </label>
           <div class="segmented" id="stageModeSeg">
             <button class="segBtn" data-stage-mode="plan">Plan</button>
-            <button class="segBtn active" data-stage-mode="swimlane">Swimlane</button>
-            <button class="segBtn" data-stage-mode="table">Table</button>
+            <button class="segBtn" data-stage-mode="swimlane">Swimlane</button>
+            <button class="segBtn active" data-stage-mode="table">Table</button>
           </div>
           <div class="legend">
             <span><i class="swatch ok"></i> available</span>
@@ -179,7 +186,7 @@
       <div class="loginHead">
         <div>
           <div class="label">Member login</div>
-          <h3>Find your BBHub identity</h3>
+          <h3>RSVP sign in</h3>
         </div>
         <button class="iconBtn" value="cancel" title="Close">
           <span class="material-symbols-outlined">close</span>
@@ -187,15 +194,15 @@
       </div>
 
       <label class="field">
-        <span>Login name</span>
+        <span>Member code</span>
         <input id="loginKeyInput" placeholder="roy.hill" autocomplete="off" />
       </label>
 
-      <div class="loginHelp">Example: <code>roy.hill</code></div>
-      <div id="loginResult" class="loginResult muted">Type a login name and press find.</div>
+      <div class="loginHelp">For now this build still uses your existing member code, for example <code>roy.hill</code>.</div>
+      <div id="loginResult" class="loginResult muted">Enter your member code and press RSVP.</div>
 
       <div class="loginActions">
-        <button type="button" class="primaryBtn" id="findLoginBtn">Find me</button>
+        <button type="button" class="primaryBtn" id="findLoginBtn">RSVP</button>
       </div>
     </form>
   </dialog>
