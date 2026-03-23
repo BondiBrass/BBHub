@@ -78,35 +78,58 @@
         <article class="card"><div id="nextGigCard" class="empty">Loading…</div></article>
         <article class="card"><div id="nextRehCard" class="empty">Loading…</div></article>
       </section>
+<section class="card">
+  
+<section class="card" id="matrixSection">
+  <div class="sectionHead">
+    <div>
+      <div class="label">At a glance</div>
+      <h2>Next 12 weeks</h2>
+    </div>
+  </div>
+  <div class="matrixLegendWrap">
+  <div id="matrixLegend" class="matrixLegend">
+    <span class="matrixLegendTitle">Event</span>
+    <span class="matrixLegendItem"><span class="matrixLegendSwatch matrixLegendSwatch--gig"></span><span>Gig</span></span>
+    <span class="matrixLegendItem"><span class="matrixLegendSwatch matrixLegendSwatch--rehearsal"></span><span>Rehearsal</span></span>
+    <span class="matrixLegendItem"><span class="matrixLegendSwatch matrixLegendSwatch--other"></span><span>Other</span></span>
+  </div>
+  <div id="matrixBandLegend" class="matrixLegend matrixLegend--band">
+    <span class="matrixLegendTitle">Band</span>
+    <span class="matrixLegendItem"><span class="matrixLegendDot matrixLegendDot--brass"></span><span>Brass</span></span>
+    <span class="matrixLegendItem"><span class="matrixLegendDot matrixLegendDot--big"></span><span>Big</span></span>
+    <span class="matrixLegendItem"><span class="matrixLegendDot matrixLegendDot--concert"></span><span>Concert</span></span>
+    <span class="matrixLegendItem"><span class="matrixLegendDot matrixLegendDot--other"></span><span>Other</span></span>
+  </div>
+</div>
+<div id="matrixTopLabels" style="font-size:10px;margin-bottom:6px;"></div>
+  <div style="display:flex;gap:6px;">
+    <div class="matrixDays">
+      <div>Mon</div><div></div><div>Wed</div><div></div><div>Fri</div><div></div><div>Sun</div>
+    </div>
+    <div id="matrixGrid" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;width:100%;"></div>
+  </div>
+</section>
 
-      <section class="card">
-        <div class="sectionHead">
-          <div>
-            <div class="label">Upcoming 12 weeks</div>
-            <h2>Rehearsals and gigs by band</h2>
-          </div>
-        </div>
-        <div id="activityMatrix" class="empty">Loading…</div>
-      </section>
+<details class="accordionCard" id="homePlannerAccordion" open>
+    <summary class="accordionSummary">
+      <div>
+        <div class="label">Planner</div>
+        <h2>See what’s coming up</h2>
+      </div>
+      <span class="material-symbols-outlined accordionIcon">expand_more</span>
+    </summary>
+    <div class="accordionBody">
+      <div class="sectionHead sectionHead--stack-mobile sectionHead--inlineToggle">
+        <div class="muted">Upcoming events in the same card format as the Next Gig cards.</div>
+        <label class="togglePill"><input type="checkbox" id="homePlannerIgnoreRehearsalsToggle" /> <span>Ignore rehearsals</span></label>
+      </div>
+      <div id="homePlannerList" class="empty">Loading…</div>
+    </div>
+  </details>
+</section>
 
-      <section class="card">
-        <details class="accordionCard" id="strengthAccordion">
-          <summary class="accordionSummary">
-            <div>
-              <div class="label">Band Strength</div>
-              <h2>Upcoming coverage</h2>
-            </div>
-            <span class="material-symbols-outlined accordionIcon">expand_more</span>
-          </summary>
-          <div class="accordionBody">
-            <div class="sectionHead sectionHead--stack-mobile sectionHead--inlineToggle">
-              <div class="muted">Open to check chair coverage across the next events.</div>
-              <label class="togglePill"><input type="checkbox" id="ignoreRehearsalsToggle" /> <span>Ignore rehearsals</span></label>
-            </div>
-            <div id="strengthMatrix" class="empty">Loading…</div>
-          </div>
-        </details>
-      </section>
+
     </section>
 
     <section id="view-stage" class="view">

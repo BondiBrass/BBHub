@@ -340,3 +340,686 @@ html[data-theme="dark"] .heroChip,html[data-theme="dark"] .heroBtn--ghost,html[d
 #heroBandChips .heroChip--check input{display:inline-block !important;appearance:auto !important;opacity:1 !important;visibility:visible !important;width:16px;height:16px;margin:0;}
 .themePill{background:var(--band-colour,#eef2ff) !important;background-color:var(--band-colour,#eef2ff) !important;color:var(--band-text,#111827) !important;border:1px solid rgba(17,24,39,.14) !important;}
 .eventInlineAlert__text a.inlineAlertDetailsLink{color:inherit;text-decoration:underline;font-weight:700;cursor:pointer;}
+
+
+/* final polish: stronger visual differentiation */
+.eventCard{
+  border-left:5px solid var(--band-accent, var(--border));
+  padding-left:12px;
+}
+.eventCard--hero{
+  box-shadow:0 10px 24px rgba(17,24,39,.08);
+}
+#plannerList, #homePlannerList{
+  display:grid;
+  gap:12px;
+}
+#plannerList .eventCard, #homePlannerList .eventCard{
+  margin-bottom:0;
+}
+.heroChip--check{
+  display:inline-flex !important;
+  align-items:center;
+  gap:8px;
+  cursor:pointer;
+}
+.heroChip--check input{
+  display:inline-block !important;
+  appearance:auto !important;
+  opacity:1 !important;
+  visibility:visible !important;
+  width:16px;
+  height:16px;
+  margin:0;
+}
+#heroBandChips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:14px;
+}
+#heroBandChips .heroChip--check{
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(17,24,39,.14);
+  box-shadow:var(--shadow);
+}
+#homePlannerList .compactCard__title, #plannerList .compactCard__title{
+  white-space:normal;
+  line-height:1.15;
+}
+#homePlannerList .compactCard__metaText, #plannerList .compactCard__metaText{
+  white-space:normal;
+}
+
+
+/* stronger full card border by band type */
+.eventCard{
+  border: 4px solid var(--band-accent, var(--border));
+  padding: 12px;
+}
+
+/* remove left border override */
+.eventCard{
+  border-left: 4px solid var(--band-accent, var(--border));
+}
+
+/* Option A: thin top alert line instead of bulky alert box */
+.eventCard{
+  position: relative;
+  overflow: hidden;
+}
+.eventCard::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:4px;
+  background:var(--alert-line, transparent);
+  border-top-left-radius:18px;
+  border-top-right-radius:18px;
+  pointer-events:none;
+}
+.eventCard.alertLine--needed{ --alert-line:#ef4444; }
+.eventCard.alertLine--warning{ --alert-line:#f59e0b; }
+.eventCard.alertLine--ok{ --alert-line:#10b981; }
+
+/* compact inline players-needed row */
+.compactCard__playersNeeded{
+  margin-top:6px;
+  font-size:12px;
+  line-height:1.25;
+  color:var(--text);
+  font-weight:700;
+}
+.compactCard__playersNeeded .playersNeedList{
+  color:var(--muted);
+  font-weight:600;
+}
+
+/* suppress bulky alert containers */
+.compactCard__alerts,
+.alertStack,
+.alertBar{
+  padding-top:0 !important;
+  padding-bottom:0 !important;
+}
+.compactCard__alerts:empty{ display:none !important; }
+
+.compactCard__alerts,
+.alertStack,
+.alertBar,
+.eventNote{
+  display:none !important;
+}
+
+.eventCard{
+  position:relative;
+}
+.eventCard::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:4px;
+  background:var(--alert-line,transparent);
+}
+.eventCard.alertLine--needed::before{background:#ef4444;}
+.eventCard.alertLine--warning::before{background:#f59e0b;}
+.eventCard.alertLine--ok::before{background:#10b981;}
+
+
+/* matrix tidy */
+#matrixSection #matrixTopLabels{
+  display:grid !important;
+  grid-template-columns:30px repeat(12, 1fr) !important;
+  gap:4px !important;
+  align-items:end !important;
+}
+#matrixSection #matrixTopLabels > div{
+  text-align:center;
+  font-size:10px;
+  line-height:1;
+  white-space:nowrap;
+}
+#matrixSection .matrixDays{
+  width:30px;
+  font-size:10px;
+  display:grid;
+  grid-template-rows:repeat(7, 1fr);
+  gap:4px;
+}
+#matrixSection .matrixDays > div{
+  min-height:14px;
+  display:flex;
+  align-items:center;
+  line-height:1;
+}
+#matrixSection #matrixGrid{
+  display:grid !important;
+  grid-template-columns:repeat(12, 1fr) !important;
+  gap:4px !important;
+  width:100% !important;
+}
+#matrixSection .matrixCol{
+  display:grid;
+  grid-template-rows:repeat(7, 1fr);
+  gap:4px;
+}
+#matrixSection .matrixCell{
+  width:100%;
+  aspect-ratio:1.35;
+  border-radius:3px;
+}
+
+/* keep notes/messages but make them thin */
+.eventNote{
+  display:flex !important;
+  align-items:flex-start;
+  gap:6px;
+  margin-top:4px;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  min-height:0 !important;
+}
+.eventNote .material-symbols-outlined{
+  font-size:16px;
+  line-height:1;
+  margin-top:1px;
+}
+.eventNote__text{
+  font-size:12px;
+  line-height:1.25;
+}
+
+/* Force Players needed to be thin and inline */
+.compactCard__playersNeeded{
+  display:block !important;
+  margin:4px 0 0 0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  min-height:0 !important;
+  font-size:12px !important;
+  line-height:1.2 !important;
+  font-weight:700 !important;
+}
+.compactCard__playersNeeded *{
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  padding:0 !important;
+  margin:0 !important;
+}
+.compactCard__playersNeeded .playersNeedList{
+  color:var(--muted) !important;
+  font-weight:600 !important;
+}
+.compactCard__playersNeeded .material-symbols-outlined{
+  display:none !important;
+}
+
+/* Messages/notes stay visible but thin */
+.eventNote{
+  display:flex !important;
+  align-items:flex-start;
+  gap:6px;
+  margin:4px 0 0 0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  min-height:0 !important;
+}
+.eventNote .material-symbols-outlined{
+  font-size:16px !important;
+  line-height:1 !important;
+  margin-top:1px !important;
+}
+.eventNote__text{
+  font-size:12px !important;
+  line-height:1.25 !important;
+  font-weight:700 !important;
+  color:var(--text) !important;
+}
+
+/* Matrix tighter: roughly half the old row height */
+#matrixSection .matrixDays{
+  grid-template-rows:repeat(7, 8px) !important;
+}
+#matrixSection .matrixDays > div{
+  min-height:8px !important;
+  font-size:9px !important;
+  line-height:1 !important;
+}
+#matrixSection .matrixCol{
+  display:grid !important;
+  grid-template-rows:repeat(7, 8px) !important;
+  gap:4px !important;
+}
+#matrixSection .matrixCell{
+  aspect-ratio:auto !important;
+  height:8px !important;
+  min-height:8px !important;
+  border-radius:2px !important;
+}
+#matrixSection #matrixGrid{
+  align-items:start !important;
+}
+
+
+/* At a glance legend */
+.matrixLegend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  align-items:center;
+  margin:0 0 8px 0;
+  font-size:11px;
+}
+.matrixLegendItem{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  line-height:1;
+}
+.matrixLegendSwatch{
+  width:10px;
+  height:10px;
+  border-radius:2px;
+  display:inline-block;
+  border:1px solid rgba(17,24,39,.12);
+}
+.matrixLegendSwatch--gig{ background:#ffe082; }
+.matrixLegendSwatch--rehearsal{ background:#90caf9; }
+.matrixLegendSwatch--other{ background:#c8e6c9; }
+
+/* band dots inside matrix */
+.matrixBandDot{
+  position:absolute;
+  right:1px;
+  bottom:1px;
+  width:4px;
+  height:4px;
+  border-radius:50%;
+}
+
+.matrixBandDot.band-brass{ background:#d97706; }
+.matrixBandDot.band-big{ background:#7c3aed; }
+.matrixBandDot.band-concert{ background:#0284c7; }
+.matrixBandDot.band-other{ background:#64748b; }
+
+/* extend legend */
+.matrixLegend{
+  justify-content:space-between;
+}
+.matrixLegend::after{
+  content:"";
+}
+
+/* restore thin Players needed row */
+.compactCard__playersNeeded{
+  display:block !important;
+  margin:4px 0 0 0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  font-size:12px !important;
+  line-height:1.2 !important;
+  font-weight:700 !important;
+}
+.compactCard__playersNeeded .playersNeedList{
+  color:var(--muted) !important;
+  font-weight:600 !important;
+}
+
+/* real restore of Players needed as a thin row */
+.compactCard__playersNeeded{
+  display:block !important;
+  margin:4px 0 0 0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  min-height:0 !important;
+  font-size:12px !important;
+  line-height:1.2 !important;
+  font-weight:700 !important;
+}
+.compactCard__playersNeeded *{
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  padding:0 !important;
+  margin:0 !important;
+}
+.compactCard__playersNeeded .playersNeedList{
+  color:var(--muted) !important;
+  font-weight:600 !important;
+}
+
+
+/* thin highlighted Players needed row */
+.compactCard__playersNeeded{
+  display:block !important;
+  margin:6px 0 0 0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  min-height:0 !important;
+}
+
+.playersNeededRow{
+  display:flex;
+  align-items:flex-start;
+  gap:6px;
+  margin:0 !important;
+  padding:4px 6px;
+  border-radius:6px;
+  background:rgba(245, 158, 11, 0.12);
+}
+
+.eventCard.alertLine--needed .playersNeededRow{
+  background:rgba(239, 68, 68, 0.12);
+}
+
+.playersNeededIcon{
+  font-size:16px !important;
+  line-height:1 !important;
+  margin-top:1px !important;
+  color:#f59e0b;
+  flex:0 0 auto;
+}
+
+.eventCard.alertLine--needed .playersNeededIcon{
+  color:#ef4444;
+}
+
+.playersNeededLabel,
+.playersNeedList{
+  font-size:12px !important;
+  line-height:1.25 !important;
+}
+
+.playersNeededLabel{
+  font-weight:800 !important;
+  color:var(--text) !important;
+  flex:0 0 auto;
+}
+
+.playersNeedList{
+  font-weight:600 !important;
+  color:var(--text) !important;
+  min-width:0;
+}
+
+/* remove legacy styling that can bulk this back up */
+.compactCard__playersNeeded *{
+  box-shadow:none !important;
+  border:none !important;
+}
+
+/* players needed highlight */
+.playersNeededRow{
+  display:flex;
+  gap:6px;
+  padding:4px 6px;
+  border-radius:6px;
+  font-size:12px;
+  line-height:1.25;
+}
+
+.playersNeededRow--needed{
+  background:rgba(239,68,68,0.12);
+}
+
+.playersNeededIcon{
+  font-family:'Material Symbols Outlined';
+  font-size:16px;
+  color:#ef4444;
+}
+
+/* message alert (notes) */
+.eventNote{
+  background:rgba(59,130,246,0.12) !important;
+  border-radius:6px;
+  padding:4px 6px !important;
+}
+
+.eventNote .material-symbols-outlined{
+  color:#3b82f6 !important;
+  font-size:16px !important;
+}
+
+/* matrix band dots (guaranteed visible) */
+.matrixCell{
+  position:relative;
+}
+
+.matrixBandDot{
+  position:absolute;
+  right:2px;
+  bottom:2px;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  border:1px solid #fff;
+  z-index:2;
+}
+
+.matrixBandDot.band-brass{ background:#d97706; }
+.matrixBandDot.band-big{ background:#7c3aed; }
+.matrixBandDot.band-concert{ background:#0284c7; }
+.matrixBandDot.band-other{ background:#64748b; }
+
+
+/* ===== Final polish ===== */
+#matrixSection .sectionHead{
+  margin-bottom:8px;
+}
+.matrixLegendWrap{
+  display:grid;
+  gap:6px;
+  margin:0 0 8px 0;
+}
+.matrixLegend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px 14px;
+  align-items:center;
+  font-size:11px;
+}
+.matrixLegendTitle{
+  display:inline-flex;
+  align-items:center;
+  font-size:11px;
+  font-weight:900;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  margin-right:2px;
+}
+.matrixLegendItem{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  line-height:1;
+}
+.matrixLegendSwatch,
+.matrixLegendDot{
+  width:10px;
+  height:10px;
+  display:inline-block;
+  border:1px solid rgba(17,24,39,.12);
+}
+.matrixLegendSwatch{ border-radius:2px; }
+.matrixLegendDot{
+  border-radius:50%;
+  border-color:#fff;
+  box-shadow:0 0 0 1px rgba(17,24,39,.14);
+}
+.matrixLegendDot--brass{ background:#d97706; }
+.matrixLegendDot--big{ background:#7c3aed; }
+.matrixLegendDot--concert{ background:#0284c7; }
+.matrixLegendDot--other{ background:#64748b; }
+
+/* cleaner matrix spacing */
+#matrixSection{
+  overflow:hidden;
+}
+#matrixSection #matrixTopLabels{
+  margin-bottom:4px !important;
+}
+#matrixSection #matrixTopLabels > div{
+  font-size:9px !important;
+  color:var(--muted);
+  letter-spacing:.01em;
+}
+#matrixSection .matrixDays > div{
+  color:var(--muted);
+  font-weight:700;
+}
+
+/* matrix cells */
+#matrixSection .matrixCell{
+  transition:transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+#matrixSection .matrixCell:hover{
+  transform:translateY(-1px);
+  box-shadow:0 3px 10px rgba(17,24,39,.10);
+}
+#matrixSection .matrixCell[title=""]{
+  cursor:default;
+}
+.matrixBandDot{
+  box-shadow:0 0 0 1px rgba(255,255,255,.95);
+}
+
+/* cards */
+.eventCard{
+  border-radius:18px;
+}
+.compactCard__title{
+  line-height:1.12;
+}
+.compactCard__metaText{
+  line-height:1.25;
+}
+.compactCard__countdown{
+  gap:4px;
+}
+
+/* alerts */
+.playersNeededRow{
+  align-items:flex-start;
+}
+.playersNeedList{
+  overflow-wrap:anywhere;
+}
+.eventNote{
+  align-items:flex-start !important;
+}
+.eventNote__text{
+  overflow-wrap:anywhere;
+}
+
+/* planner accordion */
+#homePlannerAccordion .accordionBody{
+  padding-top:4px;
+}
+#homePlannerList{
+  margin-top:4px;
+}
+
+/* mobile tidy */
+@media(max-width:640px){
+  .matrixLegend{
+    gap:8px 10px;
+    font-size:10px;
+  }
+  #matrixSection #matrixTopLabels > div{
+    font-size:8px !important;
+  }
+  .playersNeededRow{
+    padding:4px 5px;
+  }
+}
+
+/* FINAL players needed styling */
+.playersNeededRow{
+  display:flex;
+  gap:6px;
+  margin-top:6px;
+  padding:5px 7px;
+  border-radius:6px;
+  background:rgba(239,68,68,0.14);
+}
+.playersNeededIcon{
+  font-family:'Material Symbols Outlined';
+  font-size:16px;
+  color:#ef4444;
+}
+.playersNeededLabel{
+  font-size:12px;
+  font-weight:800;
+  color:#991b1b;
+}
+.playersNeedList{
+  font-size:12px;
+  font-weight:600;
+}
+
+/* Final restore: players needed row visible and compact */
+.compactCard__playersNeeded{
+  display:block !important;
+  margin:6px 0 0 0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+}
+
+.playersNeededRow{
+  display:flex !important;
+  align-items:flex-start !important;
+  gap:6px !important;
+  margin:0 !important;
+  padding:5px 7px !important;
+  border-radius:6px !important;
+  background:rgba(239,68,68,0.14) !important;
+}
+
+.playersNeededIcon{
+  font-family:'Material Symbols Outlined' !important;
+  font-size:16px !important;
+  line-height:1 !important;
+  margin-top:1px !important;
+  color:#ef4444 !important;
+  display:inline-block !important;
+}
+
+.playersNeededLabel{
+  font-size:12px !important;
+  font-weight:800 !important;
+  color:#991b1b !important;
+}
+
+.playersNeedList{
+  font-size:12px !important;
+  line-height:1.25 !important;
+  font-weight:600 !important;
+  color:var(--text) !important;
+}
+
+.playersNeededIconFallback{
+  font-size:15px;
+  line-height:1;
+  color:#ef4444;
+  display:inline-block;
+}

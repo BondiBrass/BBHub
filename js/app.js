@@ -56,7 +56,8 @@ function switchView(view){
   closeMenu();
   if(view === "stage") renderStage();
   if(view === "library") renderLibrary();
-  if(view === "planner") renderPlanner();
+  if(view === "planner") renderMatrixHome();
+  renderPlanner();
   if(view === "debug" && DEBUG) renderDebugPanel(state);
 }
 
@@ -117,7 +118,8 @@ function getEventProgramRows(event){
 }
 function renderProgramItems(detailRows, detailTitle, event){
   if(!detailRows.length){
-    return `<div class="progItem"><div class="progTitle">${event.notes ? escapeHtml(event.notes) : `No ${detailTitle.toLowerCase()} loaded.`}</div></div>`;
+    return `<div class="progItem"><div class="progTitle">${event.notes ? escapeHtml(event.notes) : `No ${detailTitle.toLowerCase()} loaded.`}
+      </div></div>`;
   }
   return detailRows.map(r => {
     const yt = String(r.youtube || r.youtube_url || r.url || "").trim();
@@ -281,7 +283,60 @@ function gigStrengthAlert(event){
   return `<div class="eventInlineAlert${toneClass}"><span class="material-symbols-outlined">${icon}</span><span class="eventInlineAlert__text"><a href="#" class="inlineAlertDetailsLink" data-open-details="${escapeHtml(event.event_id)}">${escapeHtml(text)}</a></span></div>`;
 }
 
+
+
+
+
+
+
+
+
+function playersNeededSummary(event){
+  const explicit = String(
+    event?.players_needed_instruments ||
+    event?.playersNeededInstruments ||
+    event?.players_needed_text ||
+    event?.playersNeededText ||
+    event?.needed_instruments ||
+    event?.neededInstruments ||
+    ""
+  ).trim();
+
+  const explicitCount = Number(event?.players_needed || event?.playersNeeded || 0);
+
+  let text = "";
+  if(explicit){
+    text = explicit;
+  }else if(explicitCount > 0){
+    text = String(explicitCount);
+  }else if(typeof chairsForEvent === "function" && typeof assignmentsForEvent === "function"){
+    const chairs = chairsForEvent(event).filter(ch => !ch.is_optional);
+    const assignments = assignmentsForEvent(event);
+    const open = chairs.filter(ch => !assignments.some(a => String(a.chair_code) === String(ch.chair_code)));
+    if(open.length){
+      text = open.slice(0, 5).map(ch => ch.display_short || ch.chair_code || ch.chair_label || "").filter(Boolean).join(" · ");
+      if(open.length > 5) text += ` +${open.length - 5} more`;
+    }
+  }
+
+  if(!text) return "";
+
+  return `<div class="playersNeededRow playersNeededRow--needed">
+    <span class="playersNeededIconFallback">⚠</span>
+    <span class="playersNeededLabel">Players needed:</span>
+    <span class="playersNeedList">${escapeHtml(text)}</span>
+  </div>`;
+}
+
+
+
+
+
+
+
+
 function renderEventCard(host, label, event, emptyText){
+  if(!host) return;
   if(!event){ host.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`; return; }
 
   const theme = event.type === "rehearsal" ? "rehearsal" : event.type === "gig" ? "gig" : "other";
@@ -296,9 +351,14 @@ function renderEventCard(host, label, event, emptyText){
   const detailTitle = event.type === "gig" ? "Program" : "Focus";
   const attireText = event.uniform || (event.type === "rehearsal" ? "Bring music / casual" : "TBC");
   const cardBandLabel = buildCardBandLabel(label, event);
+  const bandAccent = eventBandColour(event);
+  const neededCount = Number(event.players_needed || event.playersNeeded || 0);
+  const maybeCount = Number(event.maybe_count || event.maybeCount || 0);
+  const alertLineClass = neededCount > 0 ? "alertLine--needed" : (maybeCount > 0 ? "alertLine--warning" : "alertLine--ok");
+  const playersNeededHtml = playersNeededSummary(event) ? `<div class="compactCard__playersNeeded">${playersNeededSummary(event)}</div>` : "";
 
   host.innerHTML = `
-    <div class="compactCard eventCard eventCard--${theme} ${label === "NEXT GIG" ? "eventCard--hero" : ""}" data-event-id="${escapeHtml(event.event_id)}">
+    <div class="compactCard eventCard eventCard--${theme} ${label === "NEXT GIG" ? "eventCard--hero" : ""} ${alertLineClass}" data-event-id="${escapeHtml(event.event_id)}" style="--band-accent:${escapeHtml(bandAccent)};">
       <div class="compactCard__row">
         <div class="compactCard__left">
           <span class="material-symbols-outlined compactCard__icon">${event.type === "rehearsal" ? "music_note" : "celebration"}</span>
@@ -307,7 +367,7 @@ function renderEventCard(host, label, event, emptyText){
         ${state.session ? renderResponseMatrix(event.event_id, status, response) : `<button class="pillBtn loginPromptBtn" data-open-login="1"><span class="material-symbols-outlined">how_to_reg</span><span>RSVP</span></button>`}
       </div>
       ${event.notes ? `<div class="eventNote"><span class="material-symbols-outlined">priority_high</span><div class="eventNote__text">${escapeHtml(event.notes)}</div></div>` : ``}
-      ${event.type === "gig" ? gigStrengthAlert(event) : ``}
+            ${playersNeededHtml || ""}
       <div class="compactCard__row">
         <div class="compactCard__left">
           <span class="material-symbols-outlined compactCard__icon">schedule</span>
@@ -383,31 +443,24 @@ function renderHeroBandChips(){
   if(!host) return;
   const bands = (state.bands || [])
     .slice()
-    .sort((a,b)=>Number(a.sort_order || 999) - Number(b.sort_order || 999));
+    .sort((a,b)=>Number(a.sort_order || 999) - Number(b.sort_order || 999))
+    .filter(b => String(b.band_type || "").trim());
   if(!bands.length){
     host.innerHTML = '';
     return;
   }
-  const member = currentMember();
-  if(!member){
-    host.classList.add('heroChips--guest');
-    const selected = new Set(getGuestBandFilter());
-    host.innerHTML = bands.map(b => {
-      const bg = b.colour || '#e5e7eb';
-      const label = b.band_label || b.band_type || 'Band';
-      const bt = String(b.band_type || '').trim();
-      const checked = selected.has(bt) ? 'checked' : '';
-      return `<label class="heroChip heroChip--band heroChip--check" style="${bandChipStyle(bg)}"><input type="checkbox" class="heroBandCheck" data-band-type="${escapeHtml(bt)}" ${checked}><span>${escapeHtml(label)}</span></label>`;
-    }).join('');
-    return;
-  }
-  host.classList.remove('heroChips--guest');
+
+  host.classList.add('heroChips--guest');
+  const selected = new Set(getGuestBandFilter());
   host.innerHTML = bands.map(b => {
     const bg = b.colour || '#e5e7eb';
     const label = b.band_label || b.band_type || 'Band';
-    return `<span class="heroChip heroChip--band" style="${bandChipStyle(bg)}">${escapeHtml(label)}</span>`;
+    const bt = String(b.band_type || '').trim();
+    const checked = selected.has(bt) ? 'checked' : '';
+    return `<label class="heroChip heroChip--band heroChip--check" style="${bandChipStyle(bg)}"><input type="checkbox" class="heroBandCheck" data-band-type="${escapeHtml(bt)}" ${checked}><span>${escapeHtml(label)}</span></label>`;
   }).join('');
 }
+
 
 function renderPlayersNeeded(nextGigs){
   const bar = $("playersNeededBar");
@@ -507,6 +560,7 @@ function renderActivity(){
 
 function renderStrength(){
   const host = $("strengthMatrix");
+  if(!host) return;
   const events = eventsVisibleToCurrentUser(getFilteredUpcomingEvents()).slice(0, 6);
   if(!events.length){ host.innerHTML = `<div class="empty">No upcoming events to show.</div>`; return; }
 
@@ -747,13 +801,25 @@ function renderLibrary(){
 }
 
 function renderPlanner(){
-  const host = $("plannerList");
   const items = getFilteredUpcomingEvents();
-  if(!items.length){ host.innerHTML = `<div class="empty">No events found.</div>`; return; }
-  host.innerHTML = items.map(e => {
-    const when = formatEventDateParts(e.date, e.start_time, e.end_time, e.end_date);
-    return `<div class="plannerItem plannerItem--${escapeHtml(e.type || "other")}"><div class="plannerTop"><span class="plannerPill">${escapeHtml(e.type || "event")}</span><span class="plannerBandPill" style="${bandChipStyle(eventBandColour(e))}">${escapeHtml(eventBandLabel(e))}</span><span class="plannerWhen">${escapeHtml(when.dayLabel)} · ${escapeHtml(when.dateLabel)} · ${escapeHtml(when.timeLabel || "")}</span></div><div class="plannerTitle">${escapeHtml(e.title)}</div>${e.notes ? `<div class="plannerNote"><span class="material-symbols-outlined">priority_high</span><span>${escapeHtml(e.notes)}</span></div>` : ``}<div class="plannerMeta">${escapeHtml(e.venue || "")}</div></div>`;
-  }).join("");
+
+  function renderIntoHost(hostId, emptyText){
+    const host = $(hostId);
+    if(!host) return;
+    if(!items.length){
+      host.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`;
+      return;
+    }
+    host.innerHTML = items.map(e => `<div class="multiEventSlot" data-planner-slot="${escapeHtml(e.event_id)}"></div>`).join("");
+    items.forEach(e => {
+      const slot = host.querySelector(`[data-planner-slot="${CSS.escape(e.event_id)}"]`);
+      const cardLabel = e.type === "rehearsal" ? "UPCOMING REHEARSAL" : e.type === "gig" ? "UPCOMING GIG" : "UPCOMING EVENT";
+      renderEventCard(slot, cardLabel, e, emptyText);
+    });
+  }
+
+  renderIntoHost("plannerList", "No events found.");
+  renderIntoHost("homePlannerList", "No events found.");
 }
 
 function renderHome(){
@@ -770,11 +836,16 @@ function renderHome(){
   const alertBar = $("playersNeededBar"); if(alertBar){ alertBar.className = "alertStack hidden"; alertBar.innerHTML = ""; }
   const gigHost = $("nextGigCard");
   const rehHost = $("nextRehCard");
-  gigHost.innerHTML = nextGigs.length ? nextGigs.map(e => `<div class="multiEventSlot" data-event-slot="${escapeHtml(e.event_id)}"></div>`).join("") : `<div class="empty">No upcoming gigs found.</div>`;
-  rehHost.innerHTML = nextRehs.length ? nextRehs.map(e => `<div class="multiEventSlot" data-event-slot="${escapeHtml(e.event_id)}"></div>`).join("") : `<div class="empty">No upcoming rehearsals found.</div>`;
-  nextGigs.forEach(e => renderEventCard(gigHost.querySelector(`[data-event-slot="${CSS.escape(e.event_id)}"]`), "NEXT GIG", e, "No upcoming gigs found."));
-  nextRehs.forEach(e => renderEventCard(rehHost.querySelector(`[data-event-slot="${CSS.escape(e.event_id)}"]`), "NEXT REHEARSAL", e, "No upcoming rehearsals found."));
-  renderActivity();
+  if(gigHost){
+    gigHost.innerHTML = nextGigs.length ? nextGigs.map(e => `<div class="multiEventSlot" data-event-slot="${escapeHtml(e.event_id)}"></div>`).join("") : `<div class="empty">No upcoming gigs found.</div>`;
+    nextGigs.forEach(e => renderEventCard(gigHost.querySelector(`[data-event-slot="${CSS.escape(e.event_id)}"]`), "NEXT GIG", e, "No upcoming gigs found."));
+  }
+  if(rehHost){
+    rehHost.innerHTML = nextRehs.length ? nextRehs.map(e => `<div class="multiEventSlot" data-event-slot="${escapeHtml(e.event_id)}"></div>`).join("") : `<div class="empty">No upcoming rehearsals found.</div>`;
+    nextRehs.forEach(e => renderEventCard(rehHost.querySelector(`[data-event-slot="${CSS.escape(e.event_id)}"]`), "NEXT REHEARSAL", e, "No upcoming rehearsals found."));
+  }
+  renderMatrixHome();
+  renderPlanner();
   renderStrength();
   populateStageEventSelect();
 }
@@ -816,7 +887,8 @@ function bindHomeDelegates(){
       saveGuestBandFilter(selected);
       renderHome();
       if(document.querySelector("#view-stage.active")) renderStage();
-      if(document.querySelector("#view-planner.active")) renderPlanner();
+      if(document.querySelector("#view-planner.active")) renderMatrixHome();
+  renderPlanner();
       return;
     }
   });
@@ -883,7 +955,8 @@ function bindLoginUi(){
     box.className = "loginResult";
     box.innerHTML = `Welcome <strong>${escapeHtml(member.first_name || member.display_name || "Member")}</strong> (${escapeHtml(member.member_id)})`;
     renderHome();
-    renderPlanner();
+    renderMatrixHome();
+  renderPlanner();
   });
   $("logoutBtn").addEventListener("click", () => {
     Auth.clearUser();
@@ -892,7 +965,8 @@ function bindLoginUi(){
     $("loginResult").className = "loginResult muted";
     $("loginResult").textContent = "Logged out.";
     renderHome();
-    renderPlanner();
+    renderMatrixHome();
+  renderPlanner();
   });
 }
 
@@ -901,6 +975,8 @@ function bindControls(){
   const scrim = $("scrim");
   const backTopBtn = $("backTopBtn");
   const themeBtn = $("themeBtn");
+  const plannerIgnore = $("plannerIgnoreRehearsalsToggle");
+  const homePlannerIgnore = $("homePlannerIgnoreRehearsalsToggle");
   if (menuBtn) menuBtn.addEventListener("click", openMenu);
   if (scrim) scrim.addEventListener("click", closeMenu);
   if (backTopBtn) backTopBtn.addEventListener("click", () => window.scrollTo({top:0, behavior:"smooth"}));
@@ -920,20 +996,52 @@ function bindControls(){
   $("stagePanUpBtn").addEventListener("click", ()=> panStage(0,-40));
   $("stagePanDownBtn").addEventListener("click", ()=> panStage(0,40));
   $("stageFitBtn").addEventListener("click", ()=> resetStageView());
-  $("ignoreRehearsalsToggle").checked = state.ignoreRehearsals;
-  $("plannerIgnoreRehearsalsToggle").checked = state.ignoreRehearsals;
-  [$("ignoreRehearsalsToggle"), $("plannerIgnoreRehearsalsToggle")].forEach(el => el.addEventListener("change", () => {
+const strengthIgnore = $("ignoreRehearsalsToggle");
+const plannerIgnoreLegacy = $("plannerIgnoreRehearsalsToggle");
+[strengthIgnore, plannerIgnoreLegacy].filter(Boolean).forEach(el => {
+  el.checked = state.ignoreRehearsals;
+  el.addEventListener("change", () => {
     state.ignoreRehearsals = el.checked;
-    $("ignoreRehearsalsToggle").checked = state.ignoreRehearsals;
-    $("plannerIgnoreRehearsalsToggle").checked = state.ignoreRehearsals;
-    localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0");
-    renderStrength(); renderPlanner();
-  }));
+    [strengthIgnore, plannerIgnoreLegacy, homePlannerIgnore].filter(Boolean).forEach(box => {
+      box.checked = state.ignoreRehearsals;
+    });
+    try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
+    if(typeof renderStrength === "function") renderStrength();
+    renderMatrixHome();
+  renderPlanner();
+    renderHome();
+  });
+});
   setStageMode(state.stageMode);
   document.querySelectorAll(".segBtn").forEach(btn => btn.addEventListener("click", () => {
     setStageMode(btn.dataset.stageMode || "swimlane");
     renderStage();
   }));
+if(plannerIgnore){
+  plannerIgnore.checked = state.ignoreRehearsals;
+  plannerIgnore.addEventListener("change", () => {
+    state.ignoreRehearsals = plannerIgnore.checked;
+    if(homePlannerIgnore) homePlannerIgnore.checked = state.ignoreRehearsals;
+    try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
+    renderMatrixHome();
+  renderPlanner();
+    renderHome();
+    if(document.querySelector("#view-stage.active")) renderStage();
+  });
+}
+if(homePlannerIgnore){
+  homePlannerIgnore.checked = state.ignoreRehearsals;
+  homePlannerIgnore.addEventListener("change", () => {
+    state.ignoreRehearsals = homePlannerIgnore.checked;
+    if(plannerIgnore) plannerIgnore.checked = state.ignoreRehearsals;
+    try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
+    renderMatrixHome();
+  renderPlanner();
+    renderHome();
+    if(document.querySelector("#view-stage.active")) renderStage();
+  });
+}
+
 }
 
 async function start(){
@@ -955,7 +1063,8 @@ async function start(){
     updateSummary();
     setStatus(`Loaded (${state.source}) — ${new Date().toLocaleString()}`);
     renderHome();
-    renderPlanner();
+    renderMatrixHome();
+  renderPlanner();
     if(DEBUG) renderDebugPanel(state);
     setInterval(() => {
       renderHome();
@@ -963,11 +1072,18 @@ async function start(){
     }, 60000);
   }catch(err){
     setStatus(`Load failed: ${err.message}`);
-    $("nextGigCard").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
-    $("nextRehCard").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
-    $("activityMatrix").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
-    $("strengthMatrix").innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
-    if(DEBUG) $("debugBox").innerHTML = `<pre class="mono">${escapeHtml(String(err.stack || err.message || err))}</pre>`;
+    const safeSet = (id, html) => { const el = $(id); if(el) el.innerHTML = html; };
+    const msg = `<div class="empty">${escapeHtml(err.message)}</div>`;
+    safeSet("nextGigCard", msg);
+    safeSet("nextRehCard", msg);
+    safeSet("activityMatrix", msg);
+    safeSet("strengthMatrix", msg);
+    safeSet("plannerList", msg);
+    safeSet("homePlannerList", msg);
+    if(DEBUG){
+      const dbg = $("debugBox");
+      if(dbg) dbg.innerHTML = `<pre class="mono">${escapeHtml(String(err.stack || err.message || err))}</pre>`;
+    }
   }
 }
 
@@ -977,3 +1093,90 @@ window.addEventListener("DOMContentLoaded", () => {
   bindHomeDelegates();
   start();
 });
+
+
+
+
+
+function renderMatrixHome(){
+  const grid = $("matrixGrid");
+  const labels = $("matrixTopLabels");
+  if(!grid || !labels || !state.events) return;
+
+  grid.innerHTML = "";
+  labels.innerHTML = "<div></div>";
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  for(let w = 0; w < 12; w++){
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() + w * 7);
+
+    const lab = document.createElement("div");
+    lab.textContent = weekStart.getDate() + weekStart.toLocaleDateString("en-AU", { month:"short" });
+    labels.appendChild(lab);
+
+    const col = document.createElement("div");
+    col.className = "matrixCol";
+
+    for(let i = 0; i < 7; i++){
+      const cd = new Date(weekStart);
+      cd.setDate(weekStart.getDate() + i);
+
+      const dayEvents = (state.events || []).filter(e => {
+        const d2 = new Date(e.start_datetime || e.date || 0);
+        return d2.toDateString() === cd.toDateString();
+      });
+
+      const ev = dayEvents.length ? dayEvents[0] : null;
+
+      const cell = document.createElement("div");
+      cell.className = "matrixCell";
+      cell.style.background = "#eee";
+      cell.style.cursor = ev ? "pointer" : "default";
+
+      if(ev){
+        if(ev.type === "gig") cell.style.background = "#ffe082";
+        else if(ev.type === "rehearsal") cell.style.background = "#90caf9";
+        else cell.style.background = "#c8e6c9";
+
+        cell.title = dayEvents.map(e => e.title).join(" | ");
+
+        cell.onclick = () => {
+          const homeTarget = document.querySelector('#homePlannerList [data-event-id="' + ev.event_id + '"]');
+          if(homeTarget){
+            const details = document.getElementById("homePlannerAccordion");
+            if(details && !details.open) details.open = true;
+            homeTarget.scrollIntoView({behavior:"smooth", block:"center"});
+            return;
+          }
+          const plannerTarget = document.querySelector('#plannerList [data-event-id="' + ev.event_id + '"]');
+          if(plannerTarget){
+            plannerTarget.scrollIntoView({behavior:"smooth", block:"center"});
+          }
+        };
+
+        const bt = String(ev.band_type || "").toLowerCase();
+        let bandClass = "band-other";
+        if(bt.includes("brass")) bandClass = "band-brass";
+        else if(bt.includes("big")) bandClass = "band-big";
+        else if(bt.includes("concert")) bandClass = "band-concert";
+
+        const dot = document.createElement("div");
+        dot.className = "matrixBandDot " + bandClass;
+        cell.appendChild(dot);
+      }else{
+        cell.title = "";
+      }
+
+      col.appendChild(cell);
+    }
+
+    grid.appendChild(col);
+  }
+}
+
+
+
+
