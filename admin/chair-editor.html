@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BBHub Chair Layout Editor</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,500,0,0" />
+  <link rel="stylesheet" href="../css/chair-editor.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">Admin tool</div>
+      <h1>Chair Layout Editor</h1>
+      <div class="sub">Drag chairs to adjust <code>default_x</code> and <code>default_y</code>, then download a PSV for the BandChairs tab.</div>
+    </div>
+    <div class="topActions">
+      <a class="ghostBtn" href="../index.html">Back to BBHub</a>
+    </div>
+  </header>
+
+  <section class="controls card">
+    <div class="controlRow">
+      <label>
+        <span>Band type</span>
+        <select id="bandTypeSelect"></select>
+      </label>
+      <label>
+        <span>Section</span>
+        <select id="sectionFilter">
+          <option value="">All sections</option>
+        </select>
+      </label>
+      <label>
+        <span>Zoom</span>
+        <input id="zoomRange" type="range" min="0.6" max="2.2" step="0.05" value="1" />
+      </label>
+      <button id="fitBtn" class="actionBtn">Fit</button>
+      <button id="resetBandBtn" class="actionBtn">Reset band</button>
+      <button id="downloadBtn" class="primaryBtn">Download PSV</button>
+      <button id="copyBtn" class="actionBtn">Copy PSV</button>
+    </div>
+    <div class="controlRow controlRow--toggles">
+      <label class="check"><input type="checkbox" id="labelsToggle" checked /> Show labels</label>
+      <label class="check"><input type="checkbox" id="codeToggle" checked /> Show chair code</label>
+      <label class="check"><input type="checkbox" id="gridToggle" checked /> Show grid</label>
+      <div id="status" class="status">Loading…</div>
+    </div>
+  </section>
+
+  <main class="layout">
+    <section class="card canvasCard">
+      <div class="canvasHead">
+        <div>
+          <div class="eyebrow">SVG editor</div>
+          <h2 id="canvasTitle">Band chairs</h2>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="svgWrap">
+        <svg id="editorSvg" viewBox="0 0 1200 820" aria-label="Chair layout editor"></svg>
+      </div>
+    </section>
+
+    <aside class="card sideCard">
+      <div class="eyebrow">Selected chair</div>
+      <h2 id="selectedTitle">Nothing selected</h2>
+      <div id="selectedMeta" class="meta">Click or drag a chair.</div>
+
+      <div class="fieldGrid">
+        <label>
+          <span>X</span>
+          <input id="xInput" type="number" step="1" />
+        </label>
+        <label>
+          <span>Y</span>
+          <input id="yInput" type="number" step="1" />
+        </label>
+      </div>
+      <div class="buttonRow">
+        <button id="applyCoordsBtn" class="actionBtn">Apply coords</button>
+        <button id="resetChairBtn" class="actionBtn">Reset chair</button>
+      </div>
+
+      <div class="eyebrow sectionGap">Preview PSV</div>
+      <textarea id="psvOutput" spellcheck="false"></textarea>
+      <p class="hint">Download or copy this PSV, then paste it back into the <strong>BandChairs</strong> tab.</p>
+    </aside>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script type="module" src="../js/chair-editor.js"></script>
+</body>
+</html>

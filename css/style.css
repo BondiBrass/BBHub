@@ -1023,3 +1023,30 @@ html[data-theme="dark"] .heroChip,html[data-theme="dark"] .heroBtn--ghost,html[d
   color:#ef4444;
   display:inline-block;
 }
+
+
+.stageMatrixWrap{overflow:auto}
+.stageMatrix{table-layout:fixed;width:max-content;min-width:100%;border-collapse:collapse}
+.stageMatrix td{min-width:72px;text-align:center;padding:3px 4px;line-height:1.05}
+.stageMatrix__section,.stageMatrix__spacer{min-width:88px;text-align:left;font-weight:800}
+.stageMatrix__section{background:var(--chip);white-space:nowrap;font-size:11px;padding:3px 6px}
+.stageMatrix__spacer{background:rgba(0,0,0,.02)}
+.stageMatrix__chair{background:rgba(255,255,255,.4);font-size:11px;padding:3px 4px}
+.stageMatrix__players{vertical-align:top;font-size:11px;padding:2px 4px}
+.stageMatrix .chairChip{padding:2px 6px;font-size:11px;line-height:1;border-radius:999px}
+.stageMatrix .stageName{display:inline-block;line-height:1.05;font-size:11px;font-weight:700;white-space:nowrap;margin:0;padding:0}
+.stageMatrix .stageName--vacant{font-style:italic;letter-spacing:.3px;color:#b91c1c;font-weight:700}
+.stageMatrix .stageName--y{color:var(--ok)}
+.stageMatrix .stageName--m{color:color-mix(in srgb, var(--maybe) 80%, black 10%)}
+.stageMatrix .stageName--n{color:color-mix(in srgb, var(--no) 80%, black 10%);opacity:.72}
+.stageMatrix .stageName--me{outline:2px solid color-mix(in srgb, var(--accent) 55%, white);outline-offset:1px;border-radius:6px;padding:0 3px}
+.stageTable--compact.stageMatrix td{min-width:64px;padding:2px 3px;font-size:10px}
+.stageTable--compact.stageMatrix .stageMatrix__section,.stageTable--compact.stageMatrix .stageMatrix__spacer{min-width:82px}
+.stageTable--compact.stageMatrix .chairChip{padding:2px 5px;font-size:10px}
+.stageTable--compact.stageMatrix .stageName{font-size:10px}
+.rsvpPill--mini{font-size:10px;padding:2px 6px}
+#stageSvg text{dominant-baseline:middle}
+
+.stageMatrix .stageMatrix__vacant{background:#ffe4e6}
+.stageMatrix .stageMatrix__vacant .stageName{font-weight:700;color:#b91c1c}
+.stageMatrix .stageName--vacant{font-style:italic;letter-spacing:.3px;color:#b91c1c}

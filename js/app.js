@@ -28,11 +28,78 @@ function getInitials(name){
 function stageMemberLabel(member){
   if(!member) return "vacant";
   const first = String(member.first_name || "").trim();
-  const display = String(member.display_name || [member.first_name, member.last_name].filter(Boolean).join(" ") || "").trim();
+  const display = String(member.display_name || member.display_name_check || [member.first_name, member.last_name].filter(Boolean).join(" ") || "").trim();
   const parts = display.split(/\s+/).filter(Boolean);
-  const surnameInitial = member.last_name?.trim()?.[0] || (parts.length > 1 ? parts[parts.length - 1][0] : "");
+  const surnameInitial = String(member.last_name || "").trim()?.[0] || (parts.length > 1 ? parts[parts.length - 1][0] : "");
   const base = first || parts[0] || member.member_id || "player";
   return `${base}${surnameInitial ? surnameInitial.toUpperCase() : ""}`;
+}
+function chairAssignmentsByCode(assignments){
+  const map = new Map();
+  (assignments || []).forEach(a => {
+    const key = String(a?.chair_code || "").trim();
+    if(!key) return;
+    if(!map.has(key)) map.set(key, []);
+    map.get(key).push(a);
+  });
+  return map;
+}
+function membersForChair(assignmentsByChair, chairCode){
+  return (assignmentsByChair.get(String(chairCode || "").trim()) || [])
+    .map(a => {
+      const m = memberById(a.member_id);
+      if(m) return { ...m, ...a };
+      return {
+        member_id: a.member_id || a.member_id_check || "",
+        first_name: a.first_name || "",
+        last_name: a.last_name || "",
+        display_name: a.display_name || a.display_name_check || "",
+        display_name_check: a.display_name_check || ""
+      };
+    })
+    .filter(m => {
+      const label = String(m?.first_name || m?.display_name || m?.display_name_check || m?.member_id || "").trim();
+      return !!label;
+    });
+}
+function chairStatusInfo(eventId, members){
+  const statuses = (members || []).map(member => stageStatus(eventId, member?.member_id));
+  if(!statuses.length) return { code: "N", label: "vacant" };
+  if(statuses.includes("Y")) return { code: "Y", label: statuses.length === 1 ? "available" : `${statuses.filter(s => s === "Y").length}/${statuses.length} available` };
+  if(statuses.includes("M")) return { code: "M", label: statuses.length === 1 ? "maybe" : `${statuses.filter(s => s === "M").length}/${statuses.length} maybe` };
+  return { code: "N", label: statuses.length === 1 ? "not available" : `${statuses.length} not available` };
+}
+function chairMembersMarkup(eventId, members){
+  if(!(members || []).length) return `<span class="stageName stageName--vacant">Vacant</span>`;
+  return members.map(member => {
+    const status = stageStatus(eventId, member?.member_id);
+    const isCurrent = state.session && String(state.session.member_id || "") === String(member?.member_id || "");
+    return `<span class="stageName stageName--${statusClass(status)}${isCurrent ? ' stageName--me' : ''}">${escapeHtml(stageMemberLabel(member))}</span>`;
+  }).join('<br>');
+}
+function chairMembersTitle(chairLabel, members, eventId){
+  if(!(members || []).length) return `${chairLabel}\nVacant`;
+
+  return [chairLabel]
+    .concat(members.map(member =>
+      `${member.display_name || member.display_name_check || stageMemberLabel(member)} — ${labelForStatus(stageStatus(eventId, member?.member_id))}`
+    ))
+    .join("\n");
+}
+function chairsGroupedBySection(chairs){
+  const groups = new Map();
+  (chairs || []).forEach(ch => {
+    const key = String(ch.section || ch.lane || 'Band').trim() || 'Band';
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(ch);
+  });
+  return [...groups.entries()]
+    .map(([section, items]) => [section, items.slice().sort((a,b)=>Number(a.order||0)-Number(b.order||0))])
+    .sort((a,b) => {
+      const ao = Number(a[1][0]?.order || 0);
+      const bo = Number(b[1][0]?.order || 0);
+      return ao - bo || a[0].localeCompare(b[0]);
+    });
 }
 function updateGreeting(){
   const pill = $("greetingPill");
@@ -631,16 +698,7 @@ function hydrateCardStagePreview(eventId){
 
 function renderInlineStageTable(host, chairs, assignments, eventId){
   if(!host) return;
-  const groupKey = ch => String(ch.lane || ch.section || 'Band').trim() || 'Band';
-  const rows = chairs
-    .sort((a,b)=>Number(a.order||0)-Number(b.order||0))
-    .map(ch => {
-      const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
-      const member = a ? memberById(a.member_id) : null;
-      const status = stageStatus(eventId, member?.member_id);
-      return `<tr class="status-${status.toLowerCase()}"><td>${escapeHtml(groupKey(ch))}</td><td><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td><td><div class="stageName">${escapeHtml(member ? stageMemberLabel(member) : 'Vacant')}</div></td><td><span class="rsvpPill ${statusClass(status)}">${escapeHtml(labelForStatus(status))}</span></td></tr>`;
-    }).join('');
-  host.innerHTML = `<div class="inlineStageTableWrap"><table class="stageTable stageTable--compact"><thead><tr><th>Group</th><th>Chair</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  host.innerHTML = renderStageTableMarkup(chairs, assignments, eventId, true);
 }
 
 function renderInlineSwimlaneTable(host, chairs, assignments, eventId){
@@ -655,21 +713,22 @@ function renderStageSwimlaneTable(host, chairs, assignments, eventId){
 
 function renderSwimlaneTableMarkup(chairs, assignments, eventId, opts = {}){
   const compact = !!opts.compact;
-  const laneKey = ch => String(ch.lane || ch.section || 'Band').trim() || 'Band';
-  const rows = chairs
-    .sort((a,b)=>{
-      const ga = laneKey(a).localeCompare(laneKey(b));
-      if(ga) return ga;
-      return Number(a.order||0)-Number(b.order||0);
-    })
-    .map(ch => {
-      const group = laneKey(ch);
-      const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
-      const member = a ? memberById(a.member_id) : null;
-      const status = stageStatus(eventId, member?.member_id);
-      return `<tr class="status-${status.toLowerCase()}"><td>${escapeHtml(group)}</td><td><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td><td><div class="stageName">${escapeHtml(member ? stageMemberLabel(member) : 'Vacant')}</div></td><td><span class="rsvpPill ${statusClass(status)}">${escapeHtml(labelForStatus(status))}</span></td></tr>`;
+  return renderStageTableMarkup(chairs, assignments, eventId, compact);
+}
+
+function renderStageTableMarkup(chairs, assignments, eventId, compact = false){
+  const groups = chairsGroupedBySection(chairs);
+  const assignmentsByChair = chairAssignmentsByCode(assignments);
+  const body = groups.map(([section, items]) => {
+    const chairsRow = items.map(ch => `<td class="stageMatrix__chair"><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td>`).join('');
+    const playersRow = items.map(ch => {
+      const members = membersForChair(assignmentsByChair, ch.chair_code);
+      const isVacant = !members.length;
+      return `<td class="stageMatrix__players ${isVacant ? 'stageMatrix__vacant' : ''}">${chairMembersMarkup(eventId, members)}</td>`;
     }).join('');
-  return `<div class="swimlaneTableStack ${compact ? 'swimlaneTableStack--compact' : ''}"><div class="swimlaneTableWrap"><table class="stageTable ${compact ? 'stageTable--compact' : ''}"><thead><tr><th>Group</th><th>Chair</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows || `<tr><td colspan="4"><div class="empty">No seating loaded.</div></td></tr>`}</tbody></table></div></div>`;
+    return `<tr class="stageMatrix__chairRow"><td class="stageMatrix__section">${escapeHtml(section)}</td>${chairsRow}</tr><tr class="stageMatrix__playerRow"><td class="stageMatrix__spacer"></td>${playersRow}</tr>`;
+  }).join('');
+  return `<div class="strengthWrap"><div class="stageMatrixWrap"><table class="stageTable stageMatrix ${compact ? 'stageTable--compact' : ''}"><tbody>${body || `<tr><td colspan="2"><div class="empty">No seating loaded.</div></td></tr>`}</tbody></table></div></div>`;
 }
 
 function updateStageHeading(event){
@@ -717,22 +776,40 @@ function renderStagePlan(svg, chairs, assignments, eventId){
   bg.setAttribute("rx","28"); bg.setAttribute("fill","rgba(0,0,0,0.04)"); bg.setAttribute("stroke","rgba(128,128,128,0.18)");
   svg.appendChild(bg);
 
+  const assignmentsByChair = chairAssignmentsByCode(assignments);
+
   for(const ch of chairs){
-    const a = assignments.find(x => String(x.chair_code) === String(ch.chair_code));
-    const member = a ? memberById(a.member_id) : null;
-    const status = stageStatus(eventId, member?.member_id);
+    const members = membersForChair(assignmentsByChair, ch.chair_code);
+    const statusInfo = chairStatusInfo(eventId, members);
     const g = document.createElementNS("http://www.w3.org/2000/svg","g");
     g.setAttribute("transform", `translate(${ch.default_x},${ch.default_y})`);
     const c = document.createElementNS("http://www.w3.org/2000/svg","circle");
-    c.setAttribute("r","26"); c.setAttribute("fill", stageFill(status)); c.setAttribute("stroke","rgba(16,24,39,.22)"); c.setAttribute("stroke-width","2");
+    c.setAttribute("r","28"); c.setAttribute("fill", stageFill(statusInfo.code)); c.setAttribute("stroke","rgba(16,24,39,.22)"); c.setAttribute("stroke-width","2");
     const t1 = document.createElementNS("http://www.w3.org/2000/svg","text");
-    t1.setAttribute("text-anchor","middle"); t1.setAttribute("y","-5"); t1.setAttribute("font-size","11"); t1.setAttribute("font-weight","800"); t1.textContent = ch.display_short;
-    const t2 = document.createElementNS("http://www.w3.org/2000/svg","text");
-    t2.setAttribute("text-anchor","middle"); t2.setAttribute("y","12"); t2.setAttribute("font-size","12"); t2.setAttribute("font-weight","800");
-    t2.textContent = stageMemberLabel(member);
+    t1.setAttribute("text-anchor","middle"); t1.setAttribute("y","-12"); t1.setAttribute("font-size","11"); t1.setAttribute("font-weight","800"); t1.setAttribute("paint-order", "stroke"); t1.setAttribute("stroke", "rgba(255,255,255,.82)"); t1.setAttribute("stroke-width", "3"); t1.textContent = ch.display_short;
+    g.append(c, t1);
+
+    if(members.length){
+      members.forEach((member, idx) => {
+        const txt = document.createElementNS("http://www.w3.org/2000/svg","text");
+        txt.setAttribute("text-anchor", "middle");
+        txt.setAttribute("y", String(2 + idx * 11));
+        txt.setAttribute("font-size", "10");
+        txt.setAttribute("font-weight", state.session && String(state.session.member_id || '') === String(member.member_id || '') ? "800" : "700");
+        txt.setAttribute("paint-order", "stroke");
+        txt.setAttribute("stroke", "rgba(255,255,255,.82)");
+        txt.setAttribute("stroke-width", "2.5");
+        txt.textContent = stageMemberLabel(member);
+        g.appendChild(txt);
+      });
+    } else {
+      const vacant = document.createElementNS("http://www.w3.org/2000/svg","text");
+      vacant.setAttribute("text-anchor","middle"); vacant.setAttribute("y","8"); vacant.setAttribute("font-size","10"); vacant.setAttribute("font-weight","700"); vacant.setAttribute("paint-order", "stroke"); vacant.setAttribute("stroke", "rgba(255,255,255,.82)"); vacant.setAttribute("stroke-width", "2.5"); vacant.textContent = "Vacant";
+      g.appendChild(vacant);
+    }
     const title = document.createElementNS("http://www.w3.org/2000/svg","title");
-    title.textContent = `${ch.chair_label}\n${member ? member.display_name || "" : "Vacant"}\n${labelForStatus(status)}`;
-    g.append(c, t1, t2, title); svg.appendChild(g);
+    title.textContent = chairMembersTitle(ch.chair_label, members, eventId);
+    g.appendChild(title); svg.appendChild(g);
   }
 }
 
@@ -743,6 +820,7 @@ function renderStageSwimlane(svg, chairs, assignments, eventId, opts = {}){
   const yStart = compact ? 42 : 60;
   const laneGap = compact ? 50 : 64;
   const seatGap = compact ? 62 : 72;
+  const assignmentsByChair = chairAssignmentsByCode(assignments);
 
   lanes.forEach((lane, laneIndex) => {
     const y = yStart + laneIndex * laneGap;
@@ -753,20 +831,34 @@ function renderStageSwimlane(svg, chairs, assignments, eventId, opts = {}){
 
     chairs.filter(ch => ch.lane === lane).sort((a,b)=>a.order-b.order).forEach((ch, idx) => {
       const x = xStart + idx * seatGap;
-      const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
-      const member = a ? memberById(a.member_id) : null;
-      const status = stageStatus(eventId, member?.member_id);
+      const members = membersForChair(assignmentsByChair, ch.chair_code);
+      const statusInfo = chairStatusInfo(eventId, members);
       const g = document.createElementNS("http://www.w3.org/2000/svg","g");
       g.setAttribute("transform", `translate(${x},${y})`);
       const rect = document.createElementNS("http://www.w3.org/2000/svg","rect");
-      rect.setAttribute("x", compact ? "-24" : "-28"); rect.setAttribute("y", compact ? "-16" : "-18"); rect.setAttribute("width", compact ? "48" : "56"); rect.setAttribute("height", compact ? "32" : "36"); rect.setAttribute("rx", compact ? "8" : "10"); rect.setAttribute("fill", stageFill(status)); rect.setAttribute("stroke","rgba(16,24,39,.2)");
+      rect.setAttribute("x", compact ? "-28" : "-32"); rect.setAttribute("y", compact ? "-18" : "-20"); rect.setAttribute("width", compact ? "56" : "64"); rect.setAttribute("height", compact ? "38" : "42"); rect.setAttribute("rx", compact ? "8" : "10"); rect.setAttribute("fill", stageFill(statusInfo.code)); rect.setAttribute("stroke","rgba(16,24,39,.2)");
       const t = document.createElementNS("http://www.w3.org/2000/svg","text");
-      t.setAttribute("text-anchor","middle"); t.setAttribute("font-size", compact ? "10" : "11"); t.setAttribute("font-weight","800"); t.setAttribute("y", compact ? "-1" : "-2"); t.textContent = ch.display_short;
-      const t2 = document.createElementNS("http://www.w3.org/2000/svg","text");
-      t2.setAttribute("text-anchor","middle"); t2.setAttribute("font-size", compact ? "9" : "10"); t2.setAttribute("y", compact ? "11" : "12"); t2.textContent = stageMemberLabel(member);
+      t.setAttribute("text-anchor","middle"); t.setAttribute("font-size", compact ? "10" : "11"); t.setAttribute("font-weight","800"); t.setAttribute("y", compact ? "-4" : "-5"); t.textContent = ch.display_short;
+      g.append(rect, t);
+      if(members.length){
+        members.slice(0, 3).forEach((member, i) => {
+          const txt = document.createElementNS("http://www.w3.org/2000/svg","text");
+          txt.setAttribute("text-anchor", "middle"); txt.setAttribute("font-size", compact ? "8.5" : "9"); txt.setAttribute("y", String((compact ? 7 : 8) + i * 10)); txt.setAttribute("font-weight", state.session && String(state.session.member_id || '') === String(member.member_id || '') ? "800" : "700"); txt.textContent = stageMemberLabel(member);
+          g.appendChild(txt);
+        });
+        if(members.length > 3){
+          const more = document.createElementNS("http://www.w3.org/2000/svg","text");
+          more.setAttribute("text-anchor", "middle"); more.setAttribute("font-size", compact ? "8" : "8.5"); more.setAttribute("y", compact ? "28" : "30"); more.textContent = `+${members.length - 3}`;
+          g.appendChild(more);
+        }
+      } else {
+        const empty = document.createElementNS("http://www.w3.org/2000/svg","text");
+        empty.setAttribute("text-anchor", "middle"); empty.setAttribute("font-size", compact ? "8.5" : "9"); empty.setAttribute("y", compact ? "10" : "11"); empty.textContent = 'Vacant';
+        g.appendChild(empty);
+      }
       const title = document.createElementNS("http://www.w3.org/2000/svg","title");
-      title.textContent = `${ch.chair_label}\n${member ? member.display_name || "" : "Vacant"}`;
-      g.append(rect, t, t2, title); svg.appendChild(g);
+      title.textContent = chairMembersTitle(ch.chair_label, members, eventId);
+      g.appendChild(title); svg.appendChild(g);
     });
   });
 }
@@ -774,20 +866,7 @@ function renderStageSwimlane(svg, chairs, assignments, eventId, opts = {}){
 
 function renderStageTable(host, chairs, assignments, eventId){
   if(!host) return;
-  const groupKey = ch => String(ch.lane || ch.section || 'Band').trim() || 'Band';
-  const rows = chairs
-    .sort((a,b)=>{
-      const ga = groupKey(a).localeCompare(groupKey(b));
-      if(ga) return ga;
-      return Number(a.order||0)-Number(b.order||0);
-    })
-    .map(ch => {
-      const a = assignments.find(xa => String(xa.chair_code) === String(ch.chair_code));
-      const member = a ? memberById(a.member_id) : null;
-      const status = stageStatus(eventId, member?.member_id);
-      return `<tr class="status-${status.toLowerCase()}"><td>${escapeHtml(groupKey(ch))}</td><td><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td><td><div class="stageName">${escapeHtml(member ? stageMemberLabel(member) : 'Vacant')}</div></td><td><span class="rsvpPill ${statusClass(status)}">${escapeHtml(labelForStatus(status))}</span></td></tr>`;
-    }).join('');
-  host.innerHTML = `<div class="strengthWrap"><table class="stageTable"><thead><tr><th>Group</th><th>Chair</th><th>Player</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  host.innerHTML = renderStageTableMarkup(chairs, assignments, eventId, false);
 }
 function applyStageViewBox(){ const svg=$("stageSvg"); if(svg) svg.setAttribute("viewBox", `${state.stageViewBox.x} ${state.stageViewBox.y} ${state.stageViewBox.w} ${state.stageViewBox.h}`); }
 function resetStageView(){ state.stageViewBox = {x:0,y:0,w:1000,h:760}; applyStageViewBox(); }
