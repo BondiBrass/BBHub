@@ -1,6 +1,6 @@
 import * as Auth from "./auth.js";
 import { DEBUG, findNext, normalizeEvent, renderDebugPanel } from "./debug.js";
-import { loadData, saveRsvpResponse } from "./sheets.js";
+import { clearApiDebugLog, getApiDebugLog, loadData, saveRsvpResponse, subscribeApiDebugLog } from "./sheets.js";
 import { compactFromNowLabel, escapeHtml, formatEventDateParts } from "./utils.js";
 
 const state = {
@@ -13,6 +13,81 @@ const state = {
 
 function $(id){ return document.getElementById(id); }
 function setStatus(msg){ $("statusLine").textContent = msg; }
+function formatApiDebugValue(value){
+  if(value == null || value === "") return "";
+  if(typeof value === "string") return value;
+  try{ return JSON.stringify(value, null, 2); }catch(_e){ return String(value); }
+}
+
+function renderApiDebugPanel(entries = getApiDebugLog()){
+  const host = $("apiDebugLog");
+  const count = $("apiDebugCount");
+  if(count) count.textContent = String(entries.length || 0);
+  if(!host) return;
+  if(!entries.length){
+    host.innerHTML = `<div class="apiDebugEmpty">No API activity yet.</div>`;
+    return;
+  }
+  host.innerHTML = entries.map(entry => {
+    const label = entry.type === "request" ? "POST" : entry.type === "response" ? `RESPONSE${entry.status ? ` ${entry.status}` : ""}` : (entry.type || "log").toUpperCase();
+    const tone = entry.ok === false ? " is-error" : entry.type === "request" ? " is-request" : "";
+    const body = entry.payload ?? entry.response ?? entry.message ?? "";
+    return `
+      <div class="apiDebugItem${tone}">
+        <div class="apiDebugMeta">
+          <span class="apiDebugBadge">${escapeHtml(label)}</span>
+          <span class="apiDebugTime">${escapeHtml(new Date(entry.at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}))}</span>
+        </div>
+        ${entry.endpoint ? `<div class="apiDebugEndpoint mono">${escapeHtml(entry.endpoint)}</div>` : ""}
+        <pre class="apiDebugPre">${escapeHtml(formatApiDebugValue(body))}</pre>
+      </div>`;
+  }).join("");
+}
+
+function setupApiDebugPanel(){
+  if($("apiDebugDrawer")) return;
+  const drawer = document.createElement("section");
+  drawer.id = "apiDebugDrawer";
+  drawer.className = "apiDebugDrawer hidden";
+  drawer.innerHTML = `
+    <div class="apiDebugHead">
+      <div>
+        <div class="label">API debug</div>
+        <h3>Live POST / response log</h3>
+      </div>
+      <div class="apiDebugHeadActions">
+        <button class="pillBtn" id="apiDebugClearBtn" type="button"><span class="material-symbols-outlined">delete_sweep</span><span>Clear</span></button>
+        <button class="iconBtn" id="apiDebugCloseBtn" type="button" title="Close"><span class="material-symbols-outlined">close</span></button>
+      </div>
+    </div>
+    <div class="apiDebugSubhead">
+      <span>Entries: <strong id="apiDebugCount">0</strong></span>
+      <span class="muted">login key is masked</span>
+    </div>
+    <div id="apiDebugLog" class="apiDebugLog"></div>
+  `;
+  document.body.appendChild(drawer);
+
+  const toggle = document.createElement("button");
+  toggle.id = "apiDebugToggleBtn";
+  toggle.className = "iconBtn apiDebugToggleBtn";
+  toggle.type = "button";
+  toggle.title = "API debug log";
+  toggle.innerHTML = '<span class="material-symbols-outlined">bug_report</span>';
+  document.body.appendChild(toggle);
+
+  const setOpen = (open) => {
+    drawer.classList.toggle("hidden", !open);
+    toggle.classList.toggle("is-active", !!open);
+  };
+
+  toggle.addEventListener("click", () => setOpen(drawer.classList.contains("hidden")));
+  $("apiDebugCloseBtn")?.addEventListener("click", () => setOpen(false));
+  $("apiDebugClearBtn")?.addEventListener("click", () => clearApiDebugLog());
+  subscribeApiDebugLog(renderApiDebugPanel);
+  renderApiDebugPanel();
+}
+
 function updateSummary(){ $("summaryLine").textContent = `${state.members.length} members · ${state.events.length} events · ${state.pieces.length} pieces`; }
 function openMenu(){ $("sidePanel").classList.remove("hidden"); $("sidePanel").classList.add("open"); $("scrim").classList.remove("hidden"); }
 function closeMenu(){ $("sidePanel").classList.add("hidden"); $("sidePanel").classList.remove("open"); $("scrim").classList.add("hidden"); }
@@ -455,7 +530,6 @@ function renderEventCard(host, label, event, emptyText){
                 <textarea rows="3" data-note-for="${escapeHtml(event.event_id)}" placeholder="Optional note">${escapeHtml(note)}</textarea>
               </label>
               <div class="saveRow">
-                <button class="pillBtn saveEventRsvpBtn" data-save-event="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">save</span><span>Save response</span></button>
                 <span class="saveMsg" id="save-msg-${escapeHtml(event.event_id)}">${status ? `Current response: ${escapeHtml(labelForStatus(status))}` : "No response saved yet."}</span>
               </div>
             </div>
@@ -1029,16 +1103,31 @@ async function persistRsvp(eventId, status){
   if(existing){ existing.status = status; existing.comment = note; }
   else state.rsvp.push({ event_id:eventId, member_id:state.session.member_id, status, comment:note });
 
+  if(!state.session.login_key){
+    if(existing && snapshot){ existing.status = snapshot.status; existing.comment = snapshot.comment; }
+    else state.rsvp = state.rsvp.filter(r => !(String(r.event_id) === String(eventId) && String(r.member_id) === String(state.session.member_id)));
+    return { ok:false, message:"Missing login key in session." };
+  }
+
   const result = await saveRsvpResponse({
     event_id:eventId,
     member_id:state.session.member_id,
-    member_name:state.session.display_name || `${state.session.first_name || ""} ${state.session.last_name || ""}`.trim(),
-    status, comment:note, updated_at:new Date().toISOString()
+    login_key:state.session.login_key,
+    status,
+    comment:note
   });
 
   if(!result.ok){
     if(existing && snapshot){ existing.status = snapshot.status; existing.comment = snapshot.comment; }
     else state.rsvp = state.rsvp.filter(r => !(String(r.event_id) === String(eventId) && String(r.member_id) === String(state.session.member_id)));
+  } else {
+    const target = state.rsvp.find(r => String(r.event_id) === String(eventId) && String(r.member_id) === String(state.session.member_id));
+    if(target){
+      target.status = status;
+      target.comment = note;
+      target.updated_at = new Date().toISOString();
+      target.timestamp = target.updated_at;
+    }
   }
   return result;
 }
@@ -1070,8 +1159,19 @@ function bindHomeDelegates(){
       if(!state.session){ $("loginDialog").showModal(); return; }
       const { responseEvent, status } = respBtn.dataset;
       const msg = $(`save-msg-${responseEvent}`);
-      if(msg) msg.textContent = `Pending response: ${labelForStatus(status)}`;
       document.querySelectorAll(`.responseMini[data-response-event="${CSS.escape(responseEvent)}"]`).forEach(btn => btn.classList.toggle("active", btn.dataset.status === status));
+      if(msg) msg.textContent = "Saving…";
+      respBtn.disabled = true;
+      try {
+        const result = await persistRsvp(responseEvent, status || "");
+        if(msg) msg.textContent = result.ok ? `Saved response: ${labelForStatus(status || "")}` : `Save failed: ${result.message || result.error || "Unknown error"}`;
+        renderHome();
+        const dlg = $("loginDialog"); if(dlg?.open) dlg.close();
+        if(document.querySelector("#view-stage.active")) renderStage();
+        if(DEBUG) renderDebugPanel(state);
+      } finally {
+        respBtn.disabled = false;
+      }
       return;
     }
 
@@ -1092,20 +1192,6 @@ function bindHomeDelegates(){
       return;
     }
 
-    const saveBtn = ev.target.closest(".saveEventRsvpBtn");
-    if(saveBtn){
-      const eventId = saveBtn.dataset.saveEvent;
-      const active = document.querySelector(`.responseMini.active[data-response-event="${CSS.escape(eventId)}"]`);
-      const msg = $(`save-msg-${eventId}`);
-      if(!active){ if(msg) msg.textContent = "Choose a response first."; return; }
-      if(msg) msg.textContent = "Saving…";
-      const result = await persistRsvp(eventId, active.dataset.status || "");
-      if(msg) msg.textContent = result.ok ? `Saved response: ${labelForStatus(active.dataset.status || "")}` : `Save failed: ${result.message}`;
-      renderHome();
-    const dlg = $("loginDialog"); if(dlg?.open) dlg.close();
-      if(document.querySelector("#view-stage.active")) renderStage();
-      if(DEBUG) renderDebugPanel(state);
-    }
   });
 }
 
@@ -1256,6 +1342,7 @@ async function start(){
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  setupApiDebugPanel();
   bindControls();
   bindLoginUi();
   bindHomeDelegates();

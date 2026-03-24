@@ -1,5 +1,51 @@
 import { BBHUB_CONFIG } from "./config.js";
 
+
+const apiDebugLog = [];
+const apiDebugListeners = new Set();
+
+function redactDebugValue(key, value){
+  if(key === "login_key"){
+    const s = String(value || "");
+    if(!s) return "";
+    return s.length <= 2 ? "••" : `${s.slice(0,2)}••••`;
+  }
+  return value;
+}
+
+function sanitizeDebugPayload(payload){
+  return Object.fromEntries(Object.entries(payload || {}).map(([k,v]) => [k, redactDebugValue(k, v)]));
+}
+
+function emitApiDebug(){
+  const snapshot = apiDebugLog.slice();
+  apiDebugListeners.forEach(fn => {
+    try{ fn(snapshot); }catch(_e){}
+  });
+}
+
+function pushApiDebug(entry){
+  apiDebugLog.unshift({ id:`log_${Date.now()}_${Math.random().toString(36).slice(2,8)}`, at:new Date().toISOString(), ...entry });
+  if(apiDebugLog.length > 100) apiDebugLog.length = 100;
+  emitApiDebug();
+}
+
+export function getApiDebugLog(){
+  return apiDebugLog.slice();
+}
+
+export function clearApiDebugLog(){
+  apiDebugLog.length = 0;
+  emitApiDebug();
+}
+
+export function subscribeApiDebugLog(fn){
+  if(typeof fn !== "function") return () => {};
+  apiDebugListeners.add(fn);
+  try{ fn(apiDebugLog.slice()); }catch(_e){}
+  return () => apiDebugListeners.delete(fn);
+}
+
 const demo = {
   Bands: [
     {band_type:"main", band_label:"Main Brass Band", sort_order:1, colour:"gold"},
@@ -108,52 +154,48 @@ export async function saveRsvpResponse(payload){
   }
 
   const body = {
-    action:"saveRsvp",
-    mode:"saveRsvp",
-    view:"saveRsvp",
+    action:"rsvp",
     ...payload
   };
 
-  let lastError = null;
-  const attempts = [
-    async () => {
-      const res = await fetch(api, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify(body)
-      });
-      const text = await res.text();
-      let json = null;
-      try { json = text ? JSON.parse(text) : null; } catch (_) {}
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      return json || { ok:true, mode:"api-json", raw:text };
-    },
-    async () => {
-      const form = new URLSearchParams();
-      Object.entries(body).forEach(([k,v]) => form.set(k, String(v ?? "")));
-      const res = await fetch(api, {
-        method:"POST",
-        headers:{ "Content-Type":"application/x-www-form-urlencoded;charset=UTF-8" },
-        body: form.toString()
-      });
-      const text = await res.text();
-      let json = null;
-      try { json = text ? JSON.parse(text) : null; } catch (_) {}
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      return json || { ok:true, mode:"api-form", raw:text };
-    }
-  ];
+  pushApiDebug({
+    type:"request",
+    endpoint: api,
+    payload: sanitizeDebugPayload(body)
+  });
 
-  for(const attempt of attempts){
-    try{
-      const result = await attempt();
-      const ok = result?.ok !== false && result?.success !== false && !result?.error;
-      if(!ok) throw new Error(result?.error || result?.message || "Save rejected by API");
-      return { ok:true, mode:result?.mode || "api", message:result?.message || "Saved to server.", result };
-    }catch(err){
-      lastError = err;
+  try{
+    const res = await fetch(api, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch (_) {}
+
+    if(!res.ok){
+      pushApiDebug({ type:"response", channel:"json", ok:false, status:res.status, response: json || text || `HTTP ${res.status}` });
+      pushApiDebug({ type:"error", ok:false, message:`HTTP ${res.status}` });
+      pushApiDebug({ type:"final", ok:false, message:`HTTP ${res.status}` });
+      return { ok:false, mode:"api", message:`HTTP ${res.status}` };
     }
+
+    pushApiDebug({ type:"response", channel:"json", ok:true, status:res.status, response: json || text || "OK" });
+
+    const ok = json?.ok !== false && json?.success !== false && !json?.error;
+    if(!ok){
+      const message = json?.error || json?.message || text || "Save rejected by API";
+      pushApiDebug({ type:"error", ok:false, message });
+      pushApiDebug({ type:"final", ok:false, message });
+      return { ok:false, mode:"api", message };
+    }
+
+    return { ok:true, mode:json?.mode || "api", message:json?.message || "Saved to server.", result: json || { ok:true } };
+  }catch(err){
+    const message = err?.message || String(err) || "Unable to save RSVP to server.";
+    pushApiDebug({ type:"error", ok:false, message });
+    pushApiDebug({ type:"final", ok:false, message });
+    return { ok:false, mode:"api", message };
   }
-
-  return { ok:false, mode:"api", message:lastError?.message || "Unable to save RSVP to server." };
 }
