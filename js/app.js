@@ -6,7 +6,7 @@ import { compactFromNowLabel, escapeHtml, formatEventDateParts } from "./utils.j
 const state = {
   source:"unknown", members:[], rawEvents:[], events:[], program:[], pieces:[],
   rsvp:[], bandChairs:[], assignments:[], bands:[], session:null,
-  selectedEventId:"", savingRsvp:false, stageMode:(localStorage.getItem("bbhub.stageMode") || "table"), stageViewBox:{x:0,y:0,w:1000,h:760},
+  selectedEventId:"", savingRsvp:false, stageMode:(localStorage.getItem("bbhub.stageMode") || "swimlane"), stageViewBox:{x:0,y:0,w:1000,h:760},
   ignoreRehearsals: localStorage.getItem("bbhub.ignoreRehearsals") === "1",
   guestBandFilter: JSON.parse(localStorage.getItem("bbhub.guestBandFilter") || "[]")
 };
@@ -422,39 +422,15 @@ function renderEventCard(host, label, event, emptyText){
   const neededCount = Number(event.players_needed || event.playersNeeded || 0);
   const maybeCount = Number(event.maybe_count || event.maybeCount || 0);
   const alertLineClass = neededCount > 0 ? "alertLine--needed" : (maybeCount > 0 ? "alertLine--warning" : "alertLine--ok");
-  const playersNeededHtml = playersNeededSummary(event) ? `<div class="compactCard__playersNeeded">${playersNeededSummary(event)}</div>` : "";
-
-  host.innerHTML = `
-    <div class="compactCard eventCard eventCard--${theme} ${label === "NEXT GIG" ? "eventCard--hero" : ""} ${alertLineClass}" data-event-id="${escapeHtml(event.event_id)}" style="--band-accent:${escapeHtml(bandAccent)};">
-      <div class="compactCard__row">
-        <div class="compactCard__left">
-          <span class="material-symbols-outlined compactCard__icon">${event.type === "rehearsal" ? "music_note" : "celebration"}</span>
-          <span class="compactCard__title">${escapeHtml(event.title)}</span>
-        </div>
-        ${state.session ? renderResponseMatrix(event.event_id, status, response) : `<button class="pillBtn loginPromptBtn" data-open-login="1"><span class="material-symbols-outlined">how_to_reg</span><span>RSVP</span></button>`}
-      </div>
-      ${event.notes ? `<div class="eventNote"><span class="material-symbols-outlined">priority_high</span><div class="eventNote__text">${escapeHtml(event.notes)}</div></div>` : ``}
-            ${playersNeededHtml || ""}
-      <div class="compactCard__row">
-        <div class="compactCard__left">
-          <span class="material-symbols-outlined compactCard__icon">schedule</span>
-          <span class="compactCard__metaText">${escapeHtml(when.dayLabel)} ${escapeHtml(when.dateLabel)} · ${escapeHtml(when.timeLabel || "")}</span>
-        </div>
-        <div class="compactCard__countdown"><span class="material-symbols-outlined">timer</span><span>${escapeHtml(compactFromNowLabel(event.parsed))}</span></div>
-      </div>
-      <div class="compactCard__row">
-        <div class="compactCard__left">
-          <span class="material-symbols-outlined compactCard__icon">location_on</span>
-          <span class="compactCard__metaText">${venue}</span>
-        </div>
-      </div>
-      <div class="compactCard__row">
-        <div class="compactCard__left">
-          <span class="material-symbols-outlined compactCard__icon">checkroom</span>
-          <span class="compactCard__metaText">${escapeHtml(attireText)}</span>
-        </div>
-        <span class="themePill" style="${bandChipStyle(eventBandColour(event))}">${escapeHtml(cardBandLabel)}</span>
-      </div>
+  const playersNeededRaw = playersNeededSummary(event);
+  const playersNeededHtml = playersNeededRaw ? `<div class="compactCard__playersNeeded">${playersNeededRaw}</div>` : "";
+  const isShowcase = label === "NEXT GIG" || label === "NEXT REHEARSAL";
+  const eventKindLabel = event.type === 'rehearsal' ? 'REHEARSAL' : 'GIG';
+  const showcaseBandBar = escapeHtml(cardBandLabel || `NEXT ${eventBandLabel(event).toUpperCase()} ${eventKindLabel}`);
+  const denseBadge = escapeHtml(label === 'NEXT REHEARSAL' ? 'REHEARSAL' : (label || eventKindLabel));
+  const responseHtml = state.session ? renderResponseMatrix(event.event_id, status, response) : `<button class="pillBtn loginPromptBtn" data-open-login="1"><span class="material-symbols-outlined">how_to_reg</span><span>RSVP</span></button>`;
+  const noteHtml = event.notes ? `<div class="eventNote"><span class="material-symbols-outlined">priority_high</span><div class="eventNote__text">${escapeHtml(event.notes)}</div></div>` : ``;
+  const detailsHtml = `
       <details class="cardDetails">
         <summary><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle">expand_more</span> Details</summary>
         <div class="cardDetails__grid">
@@ -485,9 +461,65 @@ function renderEventCard(host, label, event, emptyText){
             </div>
           ` : `<div class="progItem">Login to RSVP and add a note.</div>`}
         </div>
-      </details>
-    </div>
-  `;
+      </details>`;
+
+  if(isShowcase){
+    host.innerHTML = `
+      <div class="compactCard eventCard eventCard--showcase eventCard--${theme} ${alertLineClass}" data-event-id="${escapeHtml(event.event_id)}" style="--band-accent:${escapeHtml(bandAccent)};">
+        <div class="eventShowcase__bandbar">${showcaseBandBar}</div>
+        <div class="eventShowcase__inner">
+          <div class="eventShowcase__title">${escapeHtml(event.title)}</div>
+          ${playersNeededHtml ? `<div class="eventShowcase__attention">${playersNeededHtml}</div>` : ''}
+          ${noteHtml}
+          <div class="eventShowcase__info">
+            <div class="eventShowcase__meta"><span class="material-symbols-outlined compactCard__icon">schedule</span><span>${escapeHtml(when.dayLabel)} ${escapeHtml(when.dateLabel)} · ${escapeHtml(when.timeLabel || "")}</span></div>
+            <div class="eventShowcase__meta"><span class="material-symbols-outlined compactCard__icon">location_on</span><span>${venue}</span></div>
+            <div class="eventShowcase__meta"><span class="material-symbols-outlined compactCard__icon">checkroom</span><span>${escapeHtml(attireText)}</span></div>
+          </div>
+          <div class="eventShowcase__footer">
+            <div class="eventShowcase__action eventShowcase__action--rsvp">${responseHtml}</div>
+            <div class="eventShowcase__action eventShowcase__action--countdown"><div class="compactCard__countdown"><span class="material-symbols-outlined">timer</span><span>${escapeHtml(compactFromNowLabel(event.parsed))}</span></div></div>
+            <button class="eventShowcase__detailsBtn" type="button" data-open-details="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">expand_more</span><span>Details</span></button>
+          </div>
+          ${detailsHtml}
+        </div>
+      </div>
+    `;
+  } else {
+    host.innerHTML = `
+      <div class="compactCard eventCard eventCard--dense eventCard--${theme} ${alertLineClass}" data-event-id="${escapeHtml(event.event_id)}" style="--band-accent:${escapeHtml(bandAccent)};">
+        <div class="compactCard__row compactCard__row--top">
+          <div class="compactCard__left">
+            <span class="material-symbols-outlined compactCard__icon">${event.type === "rehearsal" ? "music_note" : "celebration"}</span>
+            <span class="compactCard__title">${escapeHtml(event.title)}</span>
+          </div>
+          ${state.session ? `
+          <div class="miniRsvpOnly" aria-label="RSVP quick response">
+            <button class="responseMini ${status === "Y" ? "active committed" : ""}" data-response-event="${escapeHtml(event.event_id)}" data-status="Y" title="Available">✓</button>
+            <button class="responseMini ${status === "M" ? "active committed" : ""}" data-response-event="${escapeHtml(event.event_id)}" data-status="M" title="Maybe">?</button>
+            <button class="responseMini ${status === "N" ? "active committed" : ""}" data-response-event="${escapeHtml(event.event_id)}" data-status="N" title="Not available">✕</button>
+          </div>` : `<button class="pillBtn loginPromptBtn compactLoginBtn" data-open-login="1"><span class="material-symbols-outlined">how_to_reg</span><span>RSVP</span></button>`}
+        </div>
+        ${noteHtml}
+        ${playersNeededHtml || ""}
+        <div class="compactCard__row compactCard__row--denseMeta">
+          <div class="compactCard__left">
+            <span class="material-symbols-outlined compactCard__icon">schedule</span>
+            <span class="compactCard__metaText">${escapeHtml(when.dayLabel)} ${escapeHtml(when.dateLabel)} · ${escapeHtml(when.timeLabel || "")}</span>
+          </div>
+          <div class="compactCard__countdown"><span class="material-symbols-outlined">timer</span><span>${escapeHtml(compactFromNowLabel(event.parsed))}</span></div>
+        </div>
+        <div class="compactCard__row compactCard__row--denseMeta">
+          <div class="compactCard__left"><span class="material-symbols-outlined compactCard__icon">location_on</span><span class="compactCard__metaText">${venue}</span></div>
+        </div>
+        <div class="compactCard__row compactCard__row--denseMeta compactCard__row--bottomMeta">
+          <div class="compactCard__left"><span class="material-symbols-outlined compactCard__icon">checkroom</span><span class="compactCard__metaText">${escapeHtml(attireText)}</span></div>
+          <span class="themePill" style="${bandChipStyle(eventBandColour(event))}">${denseBadge}</span>
+        </div>
+        ${detailsHtml}
+      </div>
+    `;
+  }
   hydrateCardStagePreview(event.event_id);
 }
 
@@ -703,32 +735,89 @@ function renderInlineStageTable(host, chairs, assignments, eventId){
 
 function renderInlineSwimlaneTable(host, chairs, assignments, eventId){
   if(!host) return;
-  host.innerHTML = renderSwimlaneTableMarkup(chairs, assignments, eventId, {compact:true});
+  renderStageSwimlaneTable(host, chairs, assignments, eventId);
+}
+
+
+function bbhubSeatSectionClass(sectionName, instrumentName){
+  const t = String(sectionName || instrumentName || "").toLowerCase();
+  if(t.includes("soprano")) return "seat--soprano";
+  if(t.includes("cornet")) return "seat--cornet";
+  if(t.includes("flugel")) return "seat--flugel";
+  if(t.includes("horn")) return "seat--horn";
+  if(t.includes("euphon")) return "seat--euph";
+  if(t.includes("baritone")) return "seat--bari";
+  if(t.includes("trombone")) return "seat--tbone";
+  if(t.includes("bass")) return "seat--bass";
+  if(t.includes("percussion")) return "seat--perc";
+  if(t.includes("staff")) return "seat--staff";
+  if(t.includes("guest")) return "seat--guest";
+  return "seat--default";
+}
+function bbhubCompactPlayerName(name){
+  return escapeHtml(String(name || "").trim());
 }
 
 function renderStageSwimlaneTable(host, chairs, assignments, eventId){
-  if(!host) return;
-  host.innerHTML = renderSwimlaneTableMarkup(chairs, assignments, eventId, {compact:false});
+  const groups = chairsGroupedBySection(chairs || []);
+  const assignmentsByChair = chairAssignmentsByCode(assignments || []);
+  const parts = ['<div class="seatBoard">'];
+  groups.forEach(([section, items]) => {
+    const filled = items.filter(ch => membersForChair(assignmentsByChair, ch.chair_code).length > 0).length;
+    const total = items.length;
+    const needs = filled < total;
+    parts.push(`<section class="seatLane ${needs ? 'seatLane--needs' : ''}">`);
+    parts.push(`<div class="seatLane__title">${escapeHtml(section)} <span class="seatLane__count">${filled}/${total} filled</span></div>`);
+    parts.push('<div class="seatLane__grid">');
+    items.forEach(ch => {
+      const members = membersForChair(assignmentsByChair, ch.chair_code);
+      const isVacant = !members.length;
+      const secClass = bbhubSeatSectionClass(section, ch.chair_label || ch.instrument || '');
+      const playerHtml = isVacant
+        ? '<div class="seatCard__player seatCard__player--vacant">Vacant</div>'
+        : members.slice(0, 3).map(member => {
+            const isCurrent = state.session && String(state.session.member_id || '') === String(member.member_id || '');
+            return `<div class="seatCard__player${isCurrent ? ' seatCard__player--me' : ''}">${escapeHtml(stageMemberLabel(member))}</div>`;
+          }).join('') + (members.length > 3 ? `<div class="seatCard__more">+${members.length - 3} more</div>` : '');
+      parts.push(`
+        <article class="seatCard ${secClass} ${isVacant ? 'seatCard--vacant' : 'seatCard--filled'}" title="${escapeHtml(chairMembersTitle(ch.chair_label || ch.display_short || ch.chair_code || 'Chair', members, eventId))}">
+          <div class="seatCard__code">${escapeHtml(ch.display_short || ch.chair_code || '')}</div>
+          ${playerHtml}
+          <div class="seatCard__instrument">${escapeHtml(ch.chair_label || ch.instrument || section || '')}</div>
+        </article>
+      `);
+    });
+    parts.push('</div></section>');
+  });
+  parts.push('</div>');
+  host.innerHTML = parts.join('');
 }
 
 function renderSwimlaneTableMarkup(chairs, assignments, eventId, opts = {}){
-  const compact = !!opts.compact;
-  return renderStageTableMarkup(chairs, assignments, eventId, compact);
+  const host = document.createElement('div');
+  renderStageSwimlaneTable(host, chairs, assignments, eventId);
+  return host.innerHTML;
 }
 
 function renderStageTableMarkup(chairs, assignments, eventId, compact = false){
   const groups = chairsGroupedBySection(chairs);
   const assignmentsByChair = chairAssignmentsByCode(assignments);
   const body = groups.map(([section, items]) => {
-    const chairsRow = items.map(ch => `<td class="stageMatrix__chair"><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span></td>`).join('');
-    const playersRow = items.map(ch => {
+    const sectionHead = `<tr class="stageList__sectionRow"><td colspan="2" class="stageList__section">${escapeHtml(section)}</td></tr>`;
+    const rows = items.map(ch => {
       const members = membersForChair(assignmentsByChair, ch.chair_code);
       const isVacant = !members.length;
-      return `<td class="stageMatrix__players ${isVacant ? 'stageMatrix__vacant' : ''}">${chairMembersMarkup(eventId, members)}</td>`;
+      const names = isVacant
+        ? `<span class="stageName stageName--vacant">Vacant</span>`
+        : chairMembersMarkup(eventId, members);
+      return `<tr class="stageList__row ${isVacant ? 'stageList__row--vacant' : ''}">
+        <td class="stageList__chair"><span class="chairChip">${escapeHtml(ch.display_short || ch.chair_code || '')}</span><span class="stageList__chairLabel">${escapeHtml(ch.chair_label || '')}</span></td>
+        <td class="stageList__names">${names}</td>
+      </tr>`;
     }).join('');
-    return `<tr class="stageMatrix__chairRow"><td class="stageMatrix__section">${escapeHtml(section)}</td>${chairsRow}</tr><tr class="stageMatrix__playerRow"><td class="stageMatrix__spacer"></td>${playersRow}</tr>`;
+    return sectionHead + rows;
   }).join('');
-  return `<div class="strengthWrap"><div class="stageMatrixWrap"><table class="stageTable stageMatrix ${compact ? 'stageTable--compact' : ''}"><tbody>${body || `<tr><td colspan="2"><div class="empty">No seating loaded.</div></td></tr>`}</tbody></table></div></div>`;
+  return `<div class="strengthWrap"><div class="stageMatrixWrap"><table class="stageTable stageList ${compact ? 'stageTable--compact' : ''}"><tbody>${body || `<tr><td colspan="2"><div class="empty">No seating loaded.</div></td></tr>`}</tbody></table></div></div>`;
 }
 
 function updateStageHeading(event){
@@ -988,16 +1077,16 @@ function bindHomeDelegates(){
 
     const openStageBtn = ev.target.closest(".openStageBtn");
     if(openStageBtn){
-      openStageForEvent(openStageBtn.dataset.openStage || "", "table");
+      openStageForEvent(openStageBtn.dataset.openStage || "", "swimlane");
       return;
     }
 
-    const detailsBtn = ev.target.closest(".inlineAlertDetailsBtn, .inlineAlertDetailsLink");
+    const detailsBtn = ev.target.closest(".inlineAlertDetailsBtn, .inlineAlertDetailsLink, .eventShowcase__detailsBtn, [data-open-details]");
     if(detailsBtn){
       const card = detailsBtn.closest('.eventCard');
       const details = card?.querySelector('.cardDetails');
       if(details){
-        details.open = true;
+        details.open = !details.open || detailsBtn.matches(".inlineAlertDetailsBtn, .inlineAlertDetailsLink");
         details.scrollIntoView({ behavior:'smooth', block:'nearest' });
       }
       return;
@@ -1259,3 +1348,63 @@ function renderMatrixHome(){
 
 
 
+
+
+function upgradeStageTablesToSeatBoard(root){
+  root = root || document;
+  const tables = root.querySelectorAll('.stageMatrix table, .swimlaneTable, .stageSwimlane table, table.stageTable');
+  tables.forEach(table => {
+    if(table.dataset.v21Done === '1') return;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const groups = [];
+    rows.forEach(tr => {
+      const cells = Array.from(tr.children);
+      if(cells.length < 2) return;
+      const section = (cells[0].innerText || "").trim();
+      if(!section) return;
+      const chairs = [];
+      for(let i=1;i<cells.length;i++){
+        const txt = (cells[i].innerText || "").trim();
+        if(!txt) continue;
+        const lines = txt.split(/\n+/).map(s => s.trim()).filter(Boolean);
+        if(!lines.length) continue;
+        const chair = lines[0] || "";
+        const player = lines[1] || "Vacant";
+        const instrument = lines[2] || section;
+        chairs.push({chair, player, instrument});
+      }
+      if(chairs.length) groups.push({section, chairs});
+    });
+    if(!groups.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'seatBoard';
+    wrap.innerHTML = groups.map(g => {
+      const filled = g.chairs.filter(c => !/^vacant$/i.test(c.player)).length;
+      const needs = filled < g.chairs.length;
+      return `
+        <section class="seatLane ${needs ? 'seatLane--needs' : ''}">
+          <div class="seatLane__title">${escapeHtml(g.section)} <span class="seatLane__count">${filled}/${g.chairs.length} filled</span></div>
+          <div class="seatLane__grid">
+            ${g.chairs.map(c => `
+              <article class="seatCard ${bbhubSeatSectionClass(g.section, c.instrument)} ${/^vacant$/i.test(c.player) ? 'seatCard--vacant' : 'seatCard--filled'}">
+                <div class="seatCard__code">${escapeHtml(c.chair)}</div>
+                <div class="seatCard__player">${/^vacant$/i.test(c.player) ? 'Vacant' : escapeHtml(c.player)}</div>
+                <div class="seatCard__instrument">${escapeHtml(c.instrument)}</div>
+              </article>
+            `).join('')}
+          </div>
+        </section>
+      `;
+    }).join('');
+    table.dataset.v21Done = '1';
+    table.parentNode.insertBefore(wrap, table);
+    table.style.display = 'none';
+  });
+}
+
+document.addEventListener('click', function(){
+  setTimeout(() => upgradeStageTablesToSeatBoard(document), 0);
+});
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(() => upgradeStageTablesToSeatBoard(document), 100);
+});
