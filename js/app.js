@@ -1036,6 +1036,119 @@ function resetStageView(){ state.stageViewBox = {x:0,y:0,w:1000,h:760}; applySta
 function zoomStage(f){ const vb=state.stageViewBox; const nw=vb.w*f, nh=vb.h*f; vb.x += (vb.w-nw)/2; vb.y += (vb.h-nh)/2; vb.w=nw; vb.h=nh; applyStageViewBox(); }
 function panStage(dx,dy){ const vb=state.stageViewBox; vb.x += dx; vb.y += dy; applyStageViewBox(); }
 
+
+function sameDayDate(a, b){
+  return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+function dayShortLabel(date){
+  return date.toLocaleDateString("en-AU", { weekday:"short" });
+}
+function monthHeaderLabel(date){
+  return date.toLocaleDateString("en-AU", { month:"long", year:"numeric" });
+}
+function timelineDateLabel(event){
+  const d = event?.parsed instanceof Date ? event.parsed : new Date(event?.start_datetime || event?.date || 0);
+  if(Number.isNaN(+d)) return { day:"", date:"", month:"" };
+  return {
+    day: dayShortLabel(d),
+    date: String(d.getDate()),
+    month: d.toLocaleDateString("en-AU", { month:"short" })
+  };
+}
+function timelineTimeLabel(event){
+  const when = formatEventDateParts(event.date, event.start_time, event.end_time, event.end_date || event.date);
+  return when.timeLabel || "";
+}
+function mapSearchHref(place){
+  const q = String(place || "").trim();
+  return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : "";
+}
+function timelineCounts(eventId){
+  const rows = (state.rsvp || []).filter(r => normEventId(r.event_id) === normEventId(eventId));
+  return {
+    y: rows.filter(r => String(r.status || "").toUpperCase() === "Y").length,
+    m: rows.filter(r => String(r.status || "").toUpperCase() === "M").length,
+    n: rows.filter(r => String(r.status || "").toUpperCase() === "N").length
+  };
+}
+function timelineToneClass(event){
+  if(event.type === "rehearsal") return "timelineEvent--rehearsal";
+  if(event.type === "gig") return "timelineEvent--gig";
+  return "timelineEvent--other";
+}
+function timelineIcon(event){
+  if(event.type === "rehearsal") return "music_note";
+  if(event.type === "gig") return "celebration";
+  return "event";
+}
+function timelinePlayersNeededMarkup(event){
+  const txt = String(event?.players_needed || event?.playersNeeded || event?.alert || "").trim();
+  if(!txt) return "";
+  return `<div class="timelineNeed"><span class="material-symbols-outlined">warning</span><span>${escapeHtml(txt)}</span></div>`;
+}
+function renderTimelineList(hostId, items, emptyText){
+  const host = $(hostId);
+  if(!host) return;
+  if(!(items || []).length){
+    host.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`;
+    return;
+  }
+
+  const monthGroups = [];
+  let currentMonth = null;
+  items.forEach(event => {
+    const d = event?.parsed instanceof Date ? event.parsed : new Date(event?.start_datetime || event?.date || 0);
+    if(Number.isNaN(+d)) return;
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if(!currentMonth || currentMonth.key !== key){
+      currentMonth = { key, label: monthHeaderLabel(d), items: [] };
+      monthGroups.push(currentMonth);
+    }
+    currentMonth.items.push(event);
+  });
+
+  host.innerHTML = monthGroups.map(group => {
+    let prevDay = null;
+    const body = group.items.map(event => {
+      const d = event.parsed instanceof Date ? event.parsed : new Date(event.start_datetime || event.date || 0);
+      const showDay = !prevDay || !sameDayDate(prevDay, d);
+      prevDay = d;
+      const dt = timelineDateLabel(event);
+      const bandAccent = eventBandColour(event);
+      const bandText = bandTextColour(bandAccent);
+      const venueText = event.location || event.venue || event.place || "Venue TBC";
+      const venue = escapeHtml(venueText);
+      const venueHref = mapSearchHref(venueText);
+      const counts = timelineCounts(event.event_id);
+      const response = state.session ? rsvpFor(event.event_id, state.session.member_id) : null;
+      const you = response ? `<span class="timelineYou timelineYou--${statusClass(response.status)}">You: ${escapeHtml(labelForStatus(response.status))}</span>` : "";
+      const note = timelinePlayersNeededMarkup(event);
+      const metaMain = `<span>${escapeHtml(timelineTimeLabel(event))}</span>`;
+      const metaVenue = venueHref ? `<a class="timelineEvent__metaLink" href="${escapeHtml(venueHref)}" target="_blank" rel="noopener" data-stop-open="1"><span class="material-symbols-outlined">location_on</span>${venue}</a>` : `<span>${venue}</span>`;
+      return `
+        <div class="timelineRow ${showDay ? 'timelineRow--newDay' : 'timelineRow--sameDay'}" data-event-id="${escapeHtml(event.event_id)}">
+          <div class="timelineDate ${showDay ? '' : 'timelineDate--ghost'}">
+            ${showDay ? `<div class="timelineDate__day">${escapeHtml(dt.day)}</div><div class="timelineDate__num">${escapeHtml(dt.date)}</div><div class="timelineDate__month">${escapeHtml(dt.month)}</div>` : ''}
+          </div>
+          <button class="timelineEvent ${timelineToneClass(event)}" data-open-details="1" style="--timeline-band:${escapeHtml(bandAccent)};--timeline-band-text:${escapeHtml(bandText)};">
+            <div class="timelineEvent__top">
+              <span class="material-symbols-outlined timelineEvent__icon">${timelineIcon(event)}</span>
+              <span class="timelineEvent__title">${escapeHtml(event.title || event.event_name || "Untitled event")}</span>
+              ${you}
+            </div>
+            <div class="timelineEvent__meta">${metaMain}<span class="timelineEvent__metaSep">·</span>${metaVenue}</div>
+            ${note}
+            <div class="timelineEvent__foot">
+              <span class="timelineBand">${escapeHtml(eventBandLabel(event))}</span>
+              <span class="timelineRspv">✔ ${counts.y} &nbsp; ? ${counts.m} &nbsp; ✖ ${counts.n}</span>
+            </div>
+          </button>
+        </div>`;
+    }).join("");
+    return `<section class="timelineMonth"><div class="timelineMonth__label">${escapeHtml(group.label)}</div><div class="timelineMonth__body">${body}</div></section>`;
+  }).join("");
+}
+
 function renderLibrary(){
   const host = $("libraryList");
   if(!state.pieces.length){ host.innerHTML = `<div class="empty">No pieces found.</div>`; return; }
@@ -1044,6 +1157,8 @@ function renderLibrary(){
 
 function renderPlanner(){
   const items = getFilteredUpcomingEvents();
+  renderTimelineList("homeTimelineList", items, "No events found.");
+  renderTimelineList("plannerTimelineList", items, "No events found.");
 
   function renderIntoHost(hostId, emptyText){
     const host = $(hostId);
@@ -1231,6 +1346,8 @@ function bindControls(){
   const themeBtn = $("themeBtn");
   const plannerIgnore = $("plannerIgnoreRehearsalsToggle");
   const homePlannerIgnore = $("homePlannerIgnoreRehearsalsToggle");
+  const homeTimelineInclude = $("homeTimelineIncludeRehearsalsToggle");
+  const plannerTimelineInclude = $("plannerTimelineIncludeRehearsalsToggle");
   if (menuBtn) menuBtn.addEventListener("click", openMenu);
   if (scrim) scrim.addEventListener("click", closeMenu);
   if (backTopBtn) backTopBtn.addEventListener("click", () => window.scrollTo({top:0, behavior:"smooth"}));
@@ -1242,6 +1359,9 @@ function bindControls(){
     switchView(btn.dataset.view);
     window.scrollTo({top:0, behavior:"smooth"});
   }));
+  document.addEventListener("click", (e) => {
+    if(e.target.closest('[data-stop-open="1"]')) e.stopPropagation();
+  });
   $("stageEventSelect").addEventListener("change", ()=>{ resetStageView(); renderStage(); });
   $("stageZoomInBtn").addEventListener("click", ()=> zoomStage(0.8));
   $("stageZoomOutBtn").addEventListener("click", ()=> zoomStage(1.25));
@@ -1258,6 +1378,9 @@ const plannerIgnoreLegacy = $("plannerIgnoreRehearsalsToggle");
     state.ignoreRehearsals = el.checked;
     [strengthIgnore, plannerIgnoreLegacy, homePlannerIgnore].filter(Boolean).forEach(box => {
       box.checked = state.ignoreRehearsals;
+    });
+    [homeTimelineInclude, plannerTimelineInclude].filter(Boolean).forEach(box => {
+      box.checked = !state.ignoreRehearsals;
     });
     try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
     if(typeof renderStrength === "function") renderStrength();
@@ -1276,6 +1399,8 @@ if(plannerIgnore){
   plannerIgnore.addEventListener("change", () => {
     state.ignoreRehearsals = plannerIgnore.checked;
     if(homePlannerIgnore) homePlannerIgnore.checked = state.ignoreRehearsals;
+    if(homeTimelineInclude) homeTimelineInclude.checked = !state.ignoreRehearsals;
+    if(plannerTimelineInclude) plannerTimelineInclude.checked = !state.ignoreRehearsals;
     try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
     renderMatrixHome();
   renderPlanner();
@@ -1288,9 +1413,40 @@ if(homePlannerIgnore){
   homePlannerIgnore.addEventListener("change", () => {
     state.ignoreRehearsals = homePlannerIgnore.checked;
     if(plannerIgnore) plannerIgnore.checked = state.ignoreRehearsals;
+    if(homeTimelineInclude) homeTimelineInclude.checked = !state.ignoreRehearsals;
+    if(plannerTimelineInclude) plannerTimelineInclude.checked = !state.ignoreRehearsals;
     try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
     renderMatrixHome();
   renderPlanner();
+    renderHome();
+    if(document.querySelector("#view-stage.active")) renderStage();
+  });
+}
+
+if(homeTimelineInclude){
+  homeTimelineInclude.checked = !state.ignoreRehearsals;
+  homeTimelineInclude.addEventListener("change", () => {
+    state.ignoreRehearsals = !homeTimelineInclude.checked;
+    if(plannerTimelineInclude) plannerTimelineInclude.checked = homeTimelineInclude.checked;
+    if(plannerIgnore) plannerIgnore.checked = state.ignoreRehearsals;
+    if(homePlannerIgnore) homePlannerIgnore.checked = state.ignoreRehearsals;
+    try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
+    renderMatrixHome();
+    renderPlanner();
+    renderHome();
+    if(document.querySelector("#view-stage.active")) renderStage();
+  });
+}
+if(plannerTimelineInclude){
+  plannerTimelineInclude.checked = !state.ignoreRehearsals;
+  plannerTimelineInclude.addEventListener("change", () => {
+    state.ignoreRehearsals = !plannerTimelineInclude.checked;
+    if(homeTimelineInclude) homeTimelineInclude.checked = plannerTimelineInclude.checked;
+    if(plannerIgnore) plannerIgnore.checked = state.ignoreRehearsals;
+    if(homePlannerIgnore) homePlannerIgnore.checked = state.ignoreRehearsals;
+    try{ localStorage.setItem("bbhub.ignoreRehearsals", state.ignoreRehearsals ? "1" : "0"); }catch(_e){}
+    renderMatrixHome();
+    renderPlanner();
     renderHome();
     if(document.querySelector("#view-stage.active")) renderStage();
   });

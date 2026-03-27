@@ -133,17 +133,27 @@ export async function loadData(){
   const res = await fetch(url, { cache:"no-store" });
   if(!res.ok) throw new Error(`API failed (${res.status})`);
   const json = await res.json();
+  console.log("API RESPONSE:", json);
+
+  if(Object.prototype.hasOwnProperty.call(json, "ok")){
+    if(!json.ok){
+      throw new Error(json.error || "API returned error");
+    }
+  }
+
+  const data = (json && typeof json === "object" && json.data && typeof json.data === "object") ? json.data : json;
+
   return {
     source:"api",
-    members: json.Members || [],
-    rawEvents: json.Events || [],
-    events: json.Events || [],
-    program: json.Program || [],
-    pieces: json.Pieces || [],
-    rsvp: json.RSVP || [],
-    bandChairs: json.BandChairs || json.Chairs || [],
-    assignments: json.Assignments || [],
-    bands: json.Bands || []
+    members: data.Members || [],
+    rawEvents: data.Events || [],
+    events: data.Events || [],
+    program: data.Program || [],
+    pieces: data.Pieces || [],
+    rsvp: data.RSVP || [],
+    bandChairs: data.BandChairs || data.Chairs || [],
+    assignments: data.Assignments || [],
+    bands: data.Bands || []
   };
 }
 
@@ -165,23 +175,30 @@ export async function saveRsvpResponse(payload){
   });
 
   try{
+    const formBody = new URLSearchParams();
+    Object.entries(body).forEach(([k,v]) => {
+      if(v === undefined || v === null) return;
+      formBody.append(k, String(v));
+    });
+
     const res = await fetch(api, {
       method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify(body)
+      body: formBody
     });
+
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch (_) {}
 
     if(!res.ok){
-      pushApiDebug({ type:"response", channel:"json", ok:false, status:res.status, response: json || text || `HTTP ${res.status}` });
-      pushApiDebug({ type:"error", ok:false, message:`HTTP ${res.status}` });
-      pushApiDebug({ type:"final", ok:false, message:`HTTP ${res.status}` });
-      return { ok:false, mode:"api", message:`HTTP ${res.status}` };
+      const message = json?.error || text || `HTTP ${res.status}`;
+      pushApiDebug({ type:"response", channel:"form", ok:false, status:res.status, response: json || text || `HTTP ${res.status}` });
+      pushApiDebug({ type:"error", ok:false, message });
+      pushApiDebug({ type:"final", ok:false, message });
+      return { ok:false, mode:"api", message };
     }
 
-    pushApiDebug({ type:"response", channel:"json", ok:true, status:res.status, response: json || text || "OK" });
+    pushApiDebug({ type:"response", channel:"form", ok:true, status:res.status, response: json || text || "OK" });
 
     const ok = json?.ok !== false && json?.success !== false && !json?.error;
     if(!ok){

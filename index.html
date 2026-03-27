@@ -78,6 +78,17 @@
         <article class="card"><div id="nextGigCard" class="empty">Loading…</div></article>
         <article class="card"><div id="nextRehCard" class="empty">Loading…</div></article>
       </section>
+      <section class="card timelineCard" id="homeTimelineSection">
+        <div class="sectionHead sectionHead--stack-mobile sectionHead--inlineToggle">
+          <div>
+            <div class="label">Upcoming</div>
+            <h2>Timeline view</h2>
+          </div>
+          <label class="togglePill"><input type="checkbox" id="homeTimelineIncludeRehearsalsToggle" checked /> <span>Include rehearsals</span></label>
+        </div>
+        <div class="muted timelineSubhead">Fast mobile scan of the next few weeks.</div>
+        <div id="homeTimelineList" class="timelineList empty">Loading…</div>
+      </section>
 <section class="card">
   
 <section class="card" id="matrixSection">
@@ -178,13 +189,15 @@
 
     <section id="view-planner" class="view">
       <section class="card">
-        <div class="sectionHead sectionHead--stack-mobile">
+        <div class="sectionHead sectionHead--stack-mobile sectionHead--inlineToggle">
           <div>
             <div class="label">Planner</div>
             <h2>Upcoming events</h2>
           </div>
-          <label class="togglePill"><input type="checkbox" id="plannerIgnoreRehearsalsToggle" /> <span>Ignore rehearsals</span></label>
+          <label class="togglePill"><input type="checkbox" id="plannerTimelineIncludeRehearsalsToggle" checked /> <span>Include rehearsals</span></label>
         </div>
+        <div id="plannerTimelineList" class="timelineList empty">Loading…</div>
+        <div class="timelineDivider"><span>Expanded cards</span></div>
         <div id="plannerList" class="empty">Loading…</div>
       </section>
     </section>
