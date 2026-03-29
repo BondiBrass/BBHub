@@ -127,7 +127,7 @@ function getApiBase(){
 export async function loadData(){
   const api = getApiBase();
   if(!api){
-    return { source:"demo", members:demo.Members, rawEvents:demo.Events, events:demo.Events, program:demo.Program, pieces:demo.Pieces, rsvp:demo.RSVP, bandChairs:demo.BandChairs, assignments:demo.Assignments, bands: demo.Bands };
+    return { source:"demo", members:demo.Members, rawEvents:demo.Events, events:demo.Events, program:demo.Program, pieces:demo.Pieces, rsvp:demo.RSVP, comments:[], bandChairs:demo.BandChairs, assignments:demo.Assignments, bands: demo.Bands };
   }
   const url = api.includes("?") ? `${api}&view=all` : `${api}?view=all`;
   const res = await fetch(url, { cache:"no-store" });
@@ -151,6 +151,7 @@ export async function loadData(){
     program: data.Program || [],
     pieces: data.Pieces || [],
     rsvp: data.RSVP || [],
+    comments: data.Comments || [],
     bandChairs: data.BandChairs || data.Chairs || [],
     assignments: data.Assignments || [],
     bands: data.Bands || []
@@ -211,6 +212,67 @@ export async function saveRsvpResponse(payload){
     return { ok:true, mode:json?.mode || "api", message:json?.message || "Saved to server.", result: json || { ok:true } };
   }catch(err){
     const message = err?.message || String(err) || "Unable to save RSVP to server.";
+    pushApiDebug({ type:"error", ok:false, message });
+    pushApiDebug({ type:"final", ok:false, message });
+    return { ok:false, mode:"api", message };
+  }
+}
+
+
+export async function saveCommentResponse(payload){
+  const api = getApiBase();
+  if(!api){
+    return { ok:true, mode:"demo", message:"Saved locally in demo mode." };
+  }
+
+  const body = {
+    action:"comment",
+    ...payload
+  };
+
+  pushApiDebug({
+    type:"request",
+    endpoint: api,
+    payload: sanitizeDebugPayload(body)
+  });
+
+  try{
+    const formBody = new URLSearchParams();
+    Object.entries(body).forEach(([k,v]) => {
+      if(v === undefined || v === null || v === "") return;
+      formBody.append(k, String(v));
+    });
+
+    const res = await fetch(api, {
+      method:"POST",
+      body: formBody
+    });
+
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch (_) {}
+
+    if(!res.ok){
+      const message = json?.error || text || `HTTP ${res.status}`;
+      pushApiDebug({ type:"response", channel:"form", ok:false, status:res.status, response: json || text || `HTTP ${res.status}` });
+      pushApiDebug({ type:"error", ok:false, message });
+      pushApiDebug({ type:"final", ok:false, message });
+      return { ok:false, mode:"api", message };
+    }
+
+    pushApiDebug({ type:"response", channel:"form", ok:true, status:res.status, response: json || text || "OK" });
+
+    const ok = json?.ok !== false && json?.success !== false && !json?.error;
+    if(!ok){
+      const message = json?.error || json?.message || text || "Save rejected by API";
+      pushApiDebug({ type:"error", ok:false, message });
+      pushApiDebug({ type:"final", ok:false, message });
+      return { ok:false, mode:"api", message };
+    }
+
+    return { ok:true, mode:json?.mode || "api", message:json?.message || "Saved to server.", result: json || { ok:true } };
+  }catch(err){
+    const message = err?.message || String(err) || "Unable to save comment to server.";
     pushApiDebug({ type:"error", ok:false, message });
     pushApiDebug({ type:"final", ok:false, message });
     return { ok:false, mode:"api", message };

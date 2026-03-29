@@ -1,17 +1,21 @@
 import * as Auth from "./auth.js";
 import { DEBUG, findNext, normalizeEvent, renderDebugPanel } from "./debug.js";
-import { clearApiDebugLog, getApiDebugLog, loadData, saveRsvpResponse, subscribeApiDebugLog } from "./sheets.js";
+import { clearApiDebugLog, getApiDebugLog, loadData, saveCommentResponse, saveRsvpResponse, subscribeApiDebugLog } from "./sheets.js";
 import { compactFromNowLabel, escapeHtml, formatEventDateParts } from "./utils.js";
+
+
 
 const state = {
   source:"unknown", members:[], rawEvents:[], events:[], program:[], pieces:[],
-  rsvp:[], bandChairs:[], assignments:[], bands:[], session:null,
+  rsvp:[], comments:[], bandChairs:[], assignments:[], bands:[], session:null,
   selectedEventId:"", savingRsvp:false, stageMode:(localStorage.getItem("bbhub.stageMode") || "swimlane"), stageViewBox:{x:0,y:0,w:1000,h:760},
   ignoreRehearsals: localStorage.getItem("bbhub.ignoreRehearsals") === "1",
-  guestBandFilter: JSON.parse(localStorage.getItem("bbhub.guestBandFilter") || "[]")
+  guestBandFilter: JSON.parse(localStorage.getItem("bbhub.guestBandFilter") || "[]"),
 };
 
 function $(id){ return document.getElementById(id); }
+function showLoading(){ $("loadingOverlay")?.classList.remove("hidden"); }
+function hideLoading(){ $("loadingOverlay")?.classList.add("hidden"); }
 function setStatus(msg){ $("statusLine").textContent = msg; }
 function formatApiDebugValue(value){
   if(value == null || value === "") return "";
@@ -200,6 +204,7 @@ function switchView(view){
   if(view === "library") renderLibrary();
   if(view === "planner") renderMatrixHome();
   renderPlanner();
+  hideLoading();
   if(view === "debug" && DEBUG) renderDebugPanel(state);
 }
 
@@ -266,7 +271,11 @@ function renderProgramItems(detailRows, detailTitle, event){
   return detailRows.map(r => {
     const yt = String(r.youtube || r.youtube_url || r.url || "").trim();
     const meta = [r.composer, r.arranger, r.notes].filter(Boolean).join(" — ");
-    return `<div class="progItem"><div class="progTitleRow"><div class="progTitle">${escapeHtml(r.piece_order)}. ${escapeHtml(r.piece_name || r.title || "")}</div>${yt ? `<a class="progYoutubeLink" href="${escapeHtml(yt)}" target="_blank" rel="noopener" title="Open YouTube"><span class="material-symbols-outlined">smart_display</span></a>` : ``}</div><div class="progMeta">${escapeHtml(meta)}</div></div>`;
+    const pieceId = String(r.piece_id || r.piece_name || r.title || '').trim();
+    const targetId = `${event.event_id}|${pieceId}`;
+    const commentCount = commentsForTarget('event_piece', targetId).length;
+    const commentMarkup = pieceId ? `<div class="progComments">${renderCommentBlock('event_piece', targetId, `Piece comments${commentCount ? ` · ${commentCount}` : ''}`, { eventId:event.event_id, pieceId })}</div>` : '';
+    return `<div class="progItem"><div class="progTitleRow"><div class="progTitle">${escapeHtml(r.piece_order)}. ${escapeHtml(r.piece_name || r.title || "")}</div>${yt ? `<a class="progYoutubeLink" href="${escapeHtml(yt)}" target="_blank" rel="noopener" title="Open YouTube"><span class="material-symbols-outlined">smart_display</span></a>` : ``}</div><div class="progMeta">${escapeHtml(meta)}</div>${commentMarkup}</div>`;
   }).join("");
 }
 
@@ -307,6 +316,132 @@ function renderSavedResponseMeta(resp){
   const exact = d ? d.toLocaleString([], { weekday:"short", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
   const who = escapeHtml(getInitials(state.session.display_name || [state.session.first_name, state.session.last_name].filter(Boolean).join(" ") || "Member").toUpperCase());
   return `<div class="responseSavedMeta"><span class="avatarCircle avatarCircle--tiny">${who}</span><span>You’re ${escapeHtml(labelForStatus(resp.status))}${when ? ` · updated ${escapeHtml(when)}` : ""}${exact ? ` · ${escapeHtml(exact)}` : ""}</span></div>`;
+}
+
+function renderShowcaseResponseReminder(response){
+  if(response){
+    const d = parseResponseDate(response);
+    const when = timeAgoShort(d);
+    const status = String(response?.status || "").toUpperCase();
+
+    const statusText =
+      status === "Y" ? "I'm available" :
+      status === "M" ? "Maybe" :
+      status === "N" ? "Not available" :
+      labelForStatus(response?.status || "");
+
+    const toneClass =
+      status === "Y" ? " eventShowcase__reminder--yes" :
+      status === "M" ? " eventShowcase__reminder--maybe" :
+      status === "N" ? " eventShowcase__reminder--no" : "";
+
+    return `
+      <div class="eventShowcase__reminder${toneClass}">
+        ${when ? `<span class="eventShowcase__reminderAgo">${escapeHtml(when)}</span> ` : ""}
+        you last responded <strong>${escapeHtml(statusText)}</strong>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="eventShowcase__reminder eventShowcase__reminder--prompt">
+      Please let us know your availability ASAP
+    </div>
+  `;
+}
+
+
+function commentCreatedMs(c){
+  const raw = c?.created_at || c?.timestamp || c?.updated_at || "";
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+function normalizedComments(){
+  return (state.comments || []).filter(c => String(c.status || 'published').toLowerCase() !== 'hidden' && String(c.is_public || 'TRUE').toLowerCase() !== 'false');
+}
+function commentsForTarget(targetType, targetId){
+  return normalizedComments()
+    .filter(c => String(c.target_type || '').toLowerCase() === String(targetType || '').toLowerCase() && String(c.target_id || '').trim() === String(targetId || '').trim())
+    .sort((a,b) => commentCreatedMs(b) - commentCreatedMs(a));
+}
+function commentAuthorLabel(c){
+  if(String(c.author_type || '').toLowerCase() === 'member'){
+    return c.display_name || 'Member';
+  }
+  return c.guest_nickname || 'Guest';
+}
+function commentTagPill(c){
+  const tags = [c.tag_1, c.tag_2].filter(Boolean);
+  return tags.map(tag => `<span class="commentTag">${escapeHtml(String(tag).replace(/_/g,' '))}</span>`).join('');
+}
+function renderCommentsListMarkup(items, opts = {}){
+  const limit = Number(opts.limit || 5);
+  const expanded = !!opts.expanded;
+  const rows = expanded ? items : items.slice(0, limit);
+  if(!items.length) return `<div class="empty">No comments yet.</div>`;
+  return `${rows.map(c => {
+    const d = new Date(c.created_at || c.timestamp || Date.now());
+    const rel = timeAgoShort(d);
+    return `<article class="commentItem"><div class="commentMeta"><strong>${escapeHtml(commentAuthorLabel(c))}</strong><span>${escapeHtml(rel || '')}</span></div>${commentTagPill(c) ? `<div class="commentTags">${commentTagPill(c)}</div>` : ''}<div class="commentText">${escapeHtml(c.comment_text || '')}</div></article>`;
+  }).join('')}${items.length > limit ? `<button class="pillBtn commentMoreBtn" type="button" data-comment-toggle="1">${expanded ? 'Show less' : `Show more (${items.length - limit})`}</button>` : ''}`;
+}
+function quickTagsForTarget(targetType){
+  if(targetType === 'band') return ['suggestion','question','feedback'];
+  if(targetType === 'event_piece') return ['loved_it','needs_work','play_again'];
+  return ['running_late','need_music','need_lift','can_help'];
+}
+function renderCommentComposer(targetType, targetId, eventId = '', pieceId = ''){
+  const tags = quickTagsForTarget(targetType);
+  const guestFields = state.session ? '' : `<div class="commentGuestRow"><input class="commentInput" data-guest-nickname-for="${escapeHtml(targetType)}|${escapeHtml(targetId)}" placeholder="Nickname" /><input class="commentInput" data-guest-email-for="${escapeHtml(targetType)}|${escapeHtml(targetId)}" placeholder="Contact email" /></div>`;
+  return `<div class="commentComposer" data-comment-composer="${escapeHtml(targetType)}|${escapeHtml(targetId)}"><div class="commentTagRow">${tags.map(tag => `<button type="button" class="commentTagBtn" data-comment-tag="${escapeHtml(tag)}">${escapeHtml(String(tag).replace(/_/g,' '))}</button>`).join('')}</div>${guestFields}<textarea class="commentTextarea" data-comment-text-for="${escapeHtml(targetType)}|${escapeHtml(targetId)}" rows="3" placeholder="Add a comment for all to see"></textarea><div class="saveRow"><span class="saveMsg" id="comment-msg-${escapeHtml(targetType)}-${escapeHtml(targetId).replace(/[^a-zA-Z0-9_-]/g,'_')}">${state.session ? 'Posting as member.' : 'Guest comments require nickname and email.'}</span><button class="primaryBtn" type="button" data-save-comment="1" data-target-type="${escapeHtml(targetType)}" data-target-id="${escapeHtml(targetId)}" data-event-id="${escapeHtml(eventId)}" data-piece-id="${escapeHtml(pieceId)}">Post comment</button></div></div>`;
+}
+function renderCommentBlock(targetType, targetId, title, opts = {}){
+  const items = commentsForTarget(targetType, targetId);
+  const eventId = opts.eventId || '';
+  const pieceId = opts.pieceId || '';
+  return `<section class="commentBlock" data-comment-block="${escapeHtml(targetType)}|${escapeHtml(targetId)}"><div class="label">${escapeHtml(title)}</div><div class="commentList" data-comment-list="${escapeHtml(targetType)}|${escapeHtml(targetId)}">${renderCommentsListMarkup(items, { limit:5, expanded:false })}</div>${renderCommentComposer(targetType, targetId, eventId, pieceId)}</section>`;
+}
+function refreshCommentBlocks(){
+  document.querySelectorAll('[data-comment-list]').forEach(el => {
+    const key = el.getAttribute('data-comment-list') || '';
+    const [targetType, ...rest] = key.split('|');
+    const targetId = rest.join('|');
+    const expanded = el.dataset.expanded === '1';
+    el.innerHTML = renderCommentsListMarkup(commentsForTarget(targetType, targetId), { limit:5, expanded });
+  });
+}
+async function persistComment(payload){
+  const optimistic = {
+    comment_id:`tmp_${Date.now()}`,
+    target_type:payload.target_type,
+    target_id:payload.target_id,
+    event_id:payload.event_id || '',
+    piece_id:payload.piece_id || '',
+    author_type: state.session ? 'member' : 'guest',
+    member_id: state.session?.member_id || '',
+    display_name: state.session?.display_name || [state.session?.first_name, state.session?.last_name].filter(Boolean).join(' '),
+    guest_nickname: payload.guest_nickname || '',
+    guest_email: payload.guest_email || '',
+    comment_text: payload.comment_text,
+    tag_1: payload.tag_1 || '',
+    tag_2: payload.tag_2 || '',
+    is_public:'TRUE',
+    status:'published',
+    created_at:new Date().toISOString()
+  };
+  state.comments.unshift(optimistic);
+  refreshCommentBlocks();
+  const result = await saveCommentResponse(payload);
+  if(!result.ok){
+    state.comments = state.comments.filter(c => c.comment_id !== optimistic.comment_id);
+    refreshCommentBlocks();
+    return result;
+  }
+  const saved = result.result?.data || result.result || {};
+  optimistic.comment_id = saved.comment_id || optimistic.comment_id;
+  optimistic.created_at = saved.created_at || optimistic.created_at;
+  refreshCommentBlocks();
+  return result;
 }
 
 function getMemberBands(member){
@@ -477,6 +612,58 @@ function playersNeededSummary(event){
 
 
 
+function renderCommentUtilitySummary(event){
+  const eventCount = commentsForTarget('event', event.event_id).length;
+  const pieceCount = getEventProgramRows(event).reduce((sum, r) => {
+    const pieceId = String(r.piece_id || r.program_id || r.pieceId || '').trim();
+    if(!pieceId) return sum;
+    return sum + commentsForTarget('event_piece', `${event.event_id}|${pieceId}`).length;
+  }, 0);
+  return { eventCount, pieceCount, total:eventCount + pieceCount };
+}
+
+function renderCommentUtilityRow(event){
+  const counts = renderCommentUtilitySummary(event);
+  const totalLabel = counts.total === 1 ? 'Comments (1)' : `Comments (${counts.total})`;
+  return `<div class="commentUtilityRow commentUtilityRow--compact"><div class="commentUtilityActions"><button class="pillBtn commentJumpBtn commentJumpBtn--count" type="button" data-open-comment="${escapeHtml(event.event_id)}"><span>${escapeHtml(totalLabel)}</span><span class="material-symbols-outlined">expand_more</span></button></div></div>`;
+}
+
+function renderEventNoticeRows(event, limit=3){
+  const items = commentsForTarget('event', event.event_id);
+  if(!items.length) return `<div class="empty eventNoticeEmpty">No recent notices</div>`;
+  return items.slice(0, limit).map(c => {
+    const ago = timeAgoShort(parseResponseDate(c) || new Date(c.created_at || ''));
+    const who = commentAuthorLabel(c) || 'Guest';
+    const tags = [c.tag_1, c.tag_2].map(v => String(v || '').trim()).filter(Boolean);
+    const primaryTag = tags[0] ? String(tags[0]).replace(/_/g,' ') : '';
+    const text = String(c.comment_text || '').trim();
+    return `<article class="eventNoticeItem eventNoticeItem--compact" data-open-comment="${escapeHtml(event.event_id)}" role="button" tabindex="0">
+      <span class="eventNoticeAgo">${escapeHtml(ago || '')}</span>
+      <span class="eventNoticeSep">|</span>
+      <span class="eventNoticeAuthor">${escapeHtml(who)}</span>
+      ${primaryTag ? `<span class="eventNoticeSep">|</span><span class="eventNoticeTag">${escapeHtml(primaryTag)}</span>` : ''}
+      <span class="eventNoticeSep">|</span>
+      <span class="eventNoticeText">${escapeHtml(text)}</span>
+    </article>`;
+  }).join('');
+}
+
+function renderEventNotices(event){
+  const items = commentsForTarget('event', event.event_id);
+  if(!items.length) return '';
+  const total = items.length;
+  const previewCount = Math.min(total, 3);
+  return `<section class="eventNoticesCard eventNoticesCard--compact" data-event-notices="${escapeHtml(event.event_id)}">
+    <details class="eventNoticesDetails">
+      <summary class="eventNoticesSummary">
+        <span class="eventNoticesTitle">Latest comments (${previewCount}/${total})</span>
+        <span class="eventNoticesChevron">▼</span>
+      </summary>
+      <div class="eventNoticesScroller eventNoticesScroller--preview">${renderEventNoticeRows(event, 20)}</div>
+    </details>
+  </section>`;
+}
+
 function renderEventCard(host, label, event, emptyText){
   if(!host) return;
   if(!event){ host.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`; return; }
@@ -508,6 +695,7 @@ function renderEventCard(host, label, event, emptyText){
   const detailsHtml = `
       <details class="cardDetails">
         <summary><span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle">expand_more</span> Details</summary>
+        <div class="commentUtilityWrap"></div>
         <div class="cardDetails__grid">
           <div>
             <div class="label">Stage layout</div>
@@ -522,6 +710,9 @@ function renderEventCard(host, label, event, emptyText){
             <div class="progList">
               ${renderProgramItems(detailRows, detailTitle, event)}
             </div>
+          </div>
+          <div>
+            ${renderCommentBlock('event', event.event_id, 'Gig comments', { eventId:event.event_id })}
           </div>
           ${state.session ? `
             <div>
@@ -550,12 +741,14 @@ function renderEventCard(host, label, event, emptyText){
             <div class="eventShowcase__meta"><span class="material-symbols-outlined compactCard__icon">location_on</span><span>${venue}</span></div>
             <div class="eventShowcase__meta"><span class="material-symbols-outlined compactCard__icon">checkroom</span><span>${escapeHtml(attireText)}</span></div>
           </div>
+          ${renderEventNotices(event)}
           <div class="eventShowcase__footer">
             <div class="eventShowcase__action eventShowcase__action--rsvp">${responseHtml}</div>
             <div class="eventShowcase__action eventShowcase__action--countdown"><div class="compactCard__countdown"><span class="material-symbols-outlined">timer</span><span>${escapeHtml(compactFromNowLabel(event.parsed))}</span></div></div>
-            <button class="eventShowcase__detailsBtn" type="button" data-open-details="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">expand_more</span><span>Details</span></button>
+            <div class="eventShowcase__action eventShowcase__action--buttons"><button class="eventShowcase__detailsBtn" type="button" data-open-details="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">expand_more</span><span>Details</span></button></div>
           </div>
-          ${detailsHtml}
+          ${renderShowcaseResponseReminder(response)}
+${detailsHtml}
         </div>
       </div>
     `;
@@ -576,6 +769,7 @@ function renderEventCard(host, label, event, emptyText){
         </div>
         ${noteHtml}
         ${playersNeededHtml || ""}
+        
         <div class="compactCard__row compactCard__row--denseMeta">
           <div class="compactCard__left">
             <span class="material-symbols-outlined compactCard__icon">schedule</span>
@@ -590,7 +784,8 @@ function renderEventCard(host, label, event, emptyText){
           <div class="compactCard__left"><span class="material-symbols-outlined compactCard__icon">checkroom</span><span class="compactCard__metaText">${escapeHtml(attireText)}</span></div>
           <span class="themePill" style="${bandChipStyle(eventBandColour(event))}">${denseBadge}</span>
         </div>
-        ${detailsHtml}
+        ${renderShowcaseResponseReminder(response)}
+${detailsHtml}
       </div>
     `;
   }
@@ -923,7 +1118,7 @@ function renderStage(){
     renderStageSwimlaneTable(tableWrap, chairs, assignments, state.selectedEventId);
   }else{
     renderStagePlan(svg, chairs, assignments, state.selectedEventId);
-    applyStageViewBox();
+    requestAnimationFrame(() => resetStageView());
   }
 }
 
@@ -934,10 +1129,13 @@ function stageStatus(eventId, memberId){
 function stageFill(status){ return status === "Y" ? "var(--ok)" : status === "M" ? "var(--maybe)" : "var(--no)"; }
 
 function renderStagePlan(svg, chairs, assignments, eventId){
+  const stageGroup = document.createElementNS("http://www.w3.org/2000/svg","g");
+  stageGroup.setAttribute("id","stageGroup");
+  svg.appendChild(stageGroup);
   const bg = document.createElementNS("http://www.w3.org/2000/svg","rect");
   bg.setAttribute("x","40"); bg.setAttribute("y","20"); bg.setAttribute("width","920"); bg.setAttribute("height","700");
   bg.setAttribute("rx","28"); bg.setAttribute("fill","rgba(0,0,0,0.04)"); bg.setAttribute("stroke","rgba(128,128,128,0.18)");
-  svg.appendChild(bg);
+  stageGroup.appendChild(bg);
 
   const assignmentsByChair = chairAssignmentsByCode(assignments);
 
@@ -972,7 +1170,7 @@ function renderStagePlan(svg, chairs, assignments, eventId){
     }
     const title = document.createElementNS("http://www.w3.org/2000/svg","title");
     title.textContent = chairMembersTitle(ch.chair_label, members, eventId);
-    g.appendChild(title); svg.appendChild(g);
+    g.appendChild(title); stageGroup.appendChild(g);
   }
 }
 
@@ -990,7 +1188,7 @@ function renderStageSwimlane(svg, chairs, assignments, eventId, opts = {}){
     const laneLabel = document.createElementNS("http://www.w3.org/2000/svg","text");
     laneLabel.setAttribute("x", compact ? "16" : "40"); laneLabel.setAttribute("y", String(y + 4)); laneLabel.setAttribute("font-size", compact ? "12" : "15"); laneLabel.setAttribute("font-weight", "800");
     laneLabel.textContent = lane;
-    svg.appendChild(laneLabel);
+    stageGroup.appendChild(laneLabel);
 
     chairs.filter(ch => ch.lane === lane).sort((a,b)=>a.order-b.order).forEach((ch, idx) => {
       const x = xStart + idx * seatGap;
@@ -1021,7 +1219,7 @@ function renderStageSwimlane(svg, chairs, assignments, eventId, opts = {}){
       }
       const title = document.createElementNS("http://www.w3.org/2000/svg","title");
       title.textContent = chairMembersTitle(ch.chair_label, members, eventId);
-      g.appendChild(title); svg.appendChild(g);
+      g.appendChild(title); stageGroup.appendChild(g);
     });
   });
 }
@@ -1031,11 +1229,68 @@ function renderStageTable(host, chairs, assignments, eventId){
   if(!host) return;
   host.innerHTML = renderStageTableMarkup(chairs, assignments, eventId, false);
 }
-function applyStageViewBox(){ const svg=$("stageSvg"); if(svg) svg.setAttribute("viewBox", `${state.stageViewBox.x} ${state.stageViewBox.y} ${state.stageViewBox.w} ${state.stageViewBox.h}`); }
-function resetStageView(){ state.stageViewBox = {x:0,y:0,w:1000,h:760}; applyStageViewBox(); }
-function zoomStage(f){ const vb=state.stageViewBox; const nw=vb.w*f, nh=vb.h*f; vb.x += (vb.w-nw)/2; vb.y += (vb.h-nh)/2; vb.w=nw; vb.h=nh; applyStageViewBox(); }
-function panStage(dx,dy){ const vb=state.stageViewBox; vb.x += dx; vb.y += dy; applyStageViewBox(); }
 
+function applyStageViewBox(){
+  const svg = $("stageSvg");
+  if(svg){
+    svg.setAttribute("viewBox",
+      `${state.stageViewBox.x} ${state.stageViewBox.y} ${state.stageViewBox.w} ${state.stageViewBox.h}`);
+  }
+}
+
+function fitStageView(){
+  const svg = $("stageSvg");
+  const stageGroup = $("stageGroup");
+  if(!svg || !stageGroup || typeof stageGroup.getBBox !== "function") return false;
+
+  let bbox;
+  try{
+    bbox = stageGroup.getBBox();
+  }catch(e){
+    return false;
+  }
+
+  if(!bbox || !bbox.width || !bbox.height) return false;
+
+  const pad = 0.10;
+  const padX = Math.max(24, bbox.width * pad);
+  const padY = Math.max(24, bbox.height * pad);
+
+  state.stageViewBox = {
+    x: bbox.x - padX,
+    y: bbox.y - padY,
+    w: bbox.width + padX * 2,
+    h: bbox.height + padY * 2
+  };
+
+  applyStageViewBox();
+  return true;
+}
+
+function resetStageView(){
+  if(!fitStageView()){
+    state.stageViewBox = {x:0,y:0,w:1000,h:760};
+    applyStageViewBox();
+  }
+}
+
+function zoomStage(f){
+  const vb = state.stageViewBox;
+  const nw = vb.w * f;
+  const nh = vb.h * f;
+  vb.x += (vb.w - nw) / 2;
+  vb.y += (vb.h - nh) / 2;
+  vb.w = nw;
+  vb.h = nh;
+  applyStageViewBox();
+}
+
+function panStage(dx,dy){
+  const vb = state.stageViewBox;
+  vb.x += dx;
+  vb.y += dy;
+  applyStageViewBox();
+}
 
 function sameDayDate(a, b){
   return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -1203,8 +1458,27 @@ function renderHome(){
   }
   renderMatrixHome();
   renderPlanner();
+  renderBandNoticeboard();
   renderStrength();
   populateStageEventSelect();
+}
+
+function ensureBandNoticeboardHost(){
+  let host = $("bandNoticeboard");
+  if(host) return host;
+  const home = $("view-home");
+  if(!home) return null;
+  const section = document.createElement('section');
+  section.className = 'card';
+  section.id = 'bandNoticeboard';
+  home.appendChild(section);
+  return section;
+}
+function renderBandNoticeboard(){
+  const host = ensureBandNoticeboardHost();
+  if(!host) return;
+  const count = commentsForTarget('band', 'band_main').length;
+  host.innerHTML = `<div class="sectionHead"><div><div class="label">Band comments</div><h2>Band noticeboard</h2><div class="muted">General comments for the whole band. Guests can join in too.</div></div><div class="noticeboardSummary"><span class="material-symbols-outlined">forum</span><span>${count === 1 ? '1 comment' : `${count} comments`}</span></div></div>${renderCommentBlock('band', 'band_main', 'Latest comments')}`;
 }
 
 async function persistRsvp(eventId, status){
@@ -1269,6 +1543,73 @@ function bindHomeDelegates(){
     const loginBtn = ev.target.closest(".loginPromptBtn");
     if(loginBtn){ $("loginDialog").showModal(); return; }
 
+    const commentToggle = ev.target.closest('[data-comment-toggle="1"]');
+    if(commentToggle){
+      const list = commentToggle.closest('[data-comment-list]');
+      if(list){
+        list.dataset.expanded = list.dataset.expanded === '1' ? '0' : '1';
+        refreshCommentBlocks();
+      }
+      return;
+    }
+
+    const commentTag = ev.target.closest('.commentTagBtn');
+    if(commentTag){
+      const composer = commentTag.closest('[data-comment-composer]');
+      const textarea = composer?.querySelector('.commentTextarea');
+      const label = commentTag.textContent.trim();
+      commentTag.classList.toggle('is-active');
+      if(textarea && !textarea.value.trim()) textarea.value = label + ' – ';
+      return;
+    }
+
+    const saveCommentBtn = ev.target.closest('[data-save-comment="1"]');
+    if(saveCommentBtn){
+      const targetType = saveCommentBtn.dataset.targetType || '';
+      const targetId = saveCommentBtn.dataset.targetId || '';
+      const eventId = saveCommentBtn.dataset.eventId || '';
+      const pieceId = saveCommentBtn.dataset.pieceId || '';
+      const composer = saveCommentBtn.closest('[data-comment-composer]');
+      const textArea = composer?.querySelector('.commentTextarea');
+      const msgId = `comment-msg-${targetType}-${targetId.replace(/[^a-zA-Z0-9_-]/g,'_')}`;
+      const msg = $(msgId);
+      const selectedTags = Array.from(composer?.querySelectorAll('.commentTagBtn.is-active') || []).map(el => (el.dataset.commentTag || '').trim()).filter(Boolean);
+      const payload = {
+        target_type: targetType,
+        target_id: targetId,
+        event_id: eventId,
+        piece_id: pieceId,
+        comment_text: textArea?.value.trim() || '',
+        tag_1: selectedTags[0] || '',
+        tag_2: selectedTags[1] || ''
+      };
+      if(state.session){
+        payload.author_type = 'member';
+        payload.member_id = state.session.member_id;
+        payload.login_key = state.session.login_key;
+      }else{
+        payload.author_type = 'guest';
+        payload.guest_nickname = composer?.querySelector('[data-guest-nickname-for]')?.value.trim() || '';
+        payload.guest_email = composer?.querySelector('[data-guest-email-for]')?.value.trim() || '';
+      }
+      if(msg) msg.textContent = 'Saving comment...';
+      const result = await persistComment(payload);
+      if(result.ok){
+        if(textArea) textArea.value = '';
+        composer?.querySelectorAll('.commentTagBtn').forEach(el => el.classList.remove('is-active'));
+        if(!state.session){
+          const nick = composer?.querySelector('[data-guest-nickname-for]');
+          const email = composer?.querySelector('[data-guest-email-for]');
+          if(nick) nick.value = '';
+          if(email) email.value = '';
+        }
+        if(msg) msg.textContent = 'Comment posted.';
+      }else{
+        if(msg) msg.textContent = result.message || 'Unable to save comment.';
+      }
+      return;
+    }
+
     const respBtn = ev.target.closest(".responseMini");
     if(respBtn){
       if(!state.session){ $("loginDialog").showModal(); return; }
@@ -1286,6 +1627,22 @@ function bindHomeDelegates(){
         if(DEBUG) renderDebugPanel(state);
       } finally {
         respBtn.disabled = false;
+      }
+      return;
+    }
+
+    const openCommentBtn = ev.target.closest('[data-open-comment]');
+    if(openCommentBtn){
+      const eventId = openCommentBtn.dataset.openComment || '';
+      const card = openCommentBtn.closest('.eventCard');
+      const details = card?.querySelector('.cardDetails');
+      if(details){
+        details.open = true;
+        details.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        setTimeout(() => {
+          const textarea = details.querySelector(`[data-comment-text-for="event|${CSS.escape(eventId)}"]`);
+          textarea?.focus();
+        }, 160);
       }
       return;
     }
@@ -1455,10 +1812,12 @@ if(plannerTimelineInclude){
 }
 
 async function start(){
+  showLoading();
   try{
     state.session = Auth.loadUser();
     updateGreeting();
     setInterval(updateGreeting, 30000);
+
     const data = await loadData();
     state.source = data.source || "unknown";
     state.members = data.members || [];
@@ -1467,33 +1826,27 @@ async function start(){
     state.program = data.program || [];
     state.pieces = data.pieces || [];
     state.rsvp = data.rsvp || [];
+    state.comments = data.comments || [];
     state.bandChairs = data.bandChairs || [];
     state.assignments = data.assignments || [];
     state.bands = data.bands || [];
+
     updateSummary();
     setStatus(`Loaded (${state.source}) — ${new Date().toLocaleString()}`);
     renderHome();
     renderMatrixHome();
-  renderPlanner();
+    renderPlanner();
     if(DEBUG) renderDebugPanel(state);
+
     setInterval(() => {
       renderHome();
       if(document.querySelector("#view-stage.active")) renderStage();
     }, 60000);
-  }catch(err){
+
+  } catch(err){
     setStatus(`Load failed: ${err.message}`);
-    const safeSet = (id, html) => { const el = $(id); if(el) el.innerHTML = html; };
-    const msg = `<div class="empty">${escapeHtml(err.message)}</div>`;
-    safeSet("nextGigCard", msg);
-    safeSet("nextRehCard", msg);
-    safeSet("activityMatrix", msg);
-    safeSet("strengthMatrix", msg);
-    safeSet("plannerList", msg);
-    safeSet("homePlannerList", msg);
-    if(DEBUG){
-      const dbg = $("debugBox");
-      if(dbg) dbg.innerHTML = `<pre class="mono">${escapeHtml(String(err.stack || err.message || err))}</pre>`;
-    }
+  } finally {
+    hideLoading();
   }
 }
 
@@ -1651,3 +2004,33 @@ document.addEventListener('click', function(){
 document.addEventListener('DOMContentLoaded', function(){
   setTimeout(() => upgradeStageTablesToSeatBoard(document), 100);
 });
+
+
+function renderEventCommentsPreview(eventId, comments){
+  if(!comments || !comments.length) return "";
+
+  const rows = comments
+    .filter(c => c.event_id === eventId)
+    .sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+
+  if(!rows.length) return "";
+
+  const preview = rows.slice(0,3);
+
+  return `
+    <div class="eventCommentsPreview">
+      <div class="eventCommentsPreview__title">
+        Latest comments (${preview.length}/${rows.length}) ▼
+      </div>
+      <div class="eventCommentsPreview__list">
+        ${preview.map(r=>`
+          <div class="eventCommentsPreview__row">
+            <span>${timeAgoShort(new Date(r.timestamp))}</span>
+            <span>${escapeHtml(r.display_name||"")}</span>
+            <span>${escapeHtml(r.comment||"")}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
