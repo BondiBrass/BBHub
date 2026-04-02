@@ -147,6 +147,20 @@ export function renderDebugPanel(state) {
     .sort((a,b) => a.parsed - b.parsed);
   const nextGig = findNext(state.events, "gig");
   const nextReh = findNext(state.events, "rehearsal");
+  const timings = state.debugTimings || {};
+  const timingRows = [
+    ["Auth", timings.authMs],
+    ["loadData()", timings.loadDataMs],
+    ["State prep", timings.statePrepMs],
+    ["renderHome()", timings.renderHomeMs],
+    ["Total", timings.totalMs]
+  ].filter(([,v]) => Number.isFinite(v));
+  const totalMs = Number(timings.totalMs || 0);
+  const hint = totalMs >= 8000
+    ? "Most of the delay is probably upstream fetch/API time."
+    : totalMs >= 3000
+      ? "Startup is a bit heavy; check fetch size and repeated rendering."
+      : "Startup timing looks healthy.";
   host.innerHTML = `
     <div class="debugGrid">
       ${[
@@ -162,6 +176,18 @@ export function renderDebugPanel(state) {
           <div class="debugVal">${escapeHtml(v)}</div>
         </div>
       `).join("")}
+    </div>
+    <div class="debugStat" style="margin-top:8px">
+      <div class="debugLabel">Startup timings</div>
+      <div class="debugVal mono">${timings.startedAt ? `Run started ${escapeHtml(new Date(timings.startedAt).toLocaleString())}` : "No timing data yet."}</div>
+      ${timingRows.length ? `
+        <table class="debugTable debugTable--compact" style="margin-top:8px">
+          <thead><tr><th>step</th><th>ms</th><th>sec</th></tr></thead>
+          <tbody>
+            ${timingRows.map(([k,v]) => `<tr><td>${escapeHtml(k)}</td><td class="mono">${escapeHtml(Math.round(v))}</td><td class="mono">${escapeHtml((Number(v)/1000).toFixed(2))}</td></tr>`).join("")}
+          </tbody>
+        </table>` : ""}
+      <div class="debugHint">${escapeHtml(hint)}${timings.error ? ` Error: ${escapeHtml(timings.error)}` : ""}</div>
     </div>
     <div class="debugStat"><div class="debugLabel">Derived next gig</div><div class="debugVal mono">${nextGig ? `${escapeHtml(nextGig.event_id)} | ${escapeHtml(nextGig.title)} | ${escapeHtml(fromNowLabel(nextGig.parsed))}` : "not found"}</div></div>
     <div class="debugStat" style="margin-top:8px"><div class="debugLabel">Derived next rehearsal</div><div class="debugVal mono">${nextReh ? `${escapeHtml(nextReh.event_id)} | ${escapeHtml(nextReh.title)} | ${escapeHtml(fromNowLabel(nextReh.parsed))}` : "not found"}</div></div>

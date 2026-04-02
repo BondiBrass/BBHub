@@ -8,9 +8,10 @@ import { compactFromNowLabel, escapeHtml, formatEventDateParts } from "./utils.j
 const state = {
   source:"unknown", members:[], rawEvents:[], events:[], program:[], pieces:[],
   rsvp:[], comments:[], bandChairs:[], assignments:[], bands:[], session:null,
-  selectedEventId:"", savingRsvp:false, stageMode:(localStorage.getItem("bbhub.stageMode") || "swimlane"), stageViewBox:{x:0,y:0,w:1000,h:760},
+  selectedEventId:"", savingRsvp:false, stageMode:(localStorage.getItem("bbhub.stageMode") || "graphic"), stageViewBox:{x:0,y:0,w:1000,h:760},
   ignoreRehearsals: localStorage.getItem("bbhub.ignoreRehearsals") === "1",
   guestBandFilter: JSON.parse(localStorage.getItem("bbhub.guestBandFilter") || "[]"),
+  debugTimings: {}
 };
 
 function $(id){ return document.getElementById(id); }
@@ -399,7 +400,7 @@ function renderCommentBlock(targetType, targetId, title, opts = {}){
   const items = commentsForTarget(targetType, targetId);
   const eventId = opts.eventId || '';
   const pieceId = opts.pieceId || '';
-  return `<section class="commentBlock" data-comment-block="${escapeHtml(targetType)}|${escapeHtml(targetId)}"><div class="label">${escapeHtml(title)}</div><div class="commentList" data-comment-list="${escapeHtml(targetType)}|${escapeHtml(targetId)}">${renderCommentsListMarkup(items, { limit:5, expanded:false })}</div>${renderCommentComposer(targetType, targetId, eventId, pieceId)}</section>`;
+  return `<section class="commentBlock" data-comment-block="${escapeHtml(targetType)}|${escapeHtml(targetId)}"><div class="label">${escapeHtml(title)}</div><div class="commentList" data-comment-list="${escapeHtml(targetType)}|${escapeHtml(targetId)}">${renderCommentsListMarkup(items, { limit:3, expanded:false })}</div>${renderCommentComposer(targetType, targetId, eventId, pieceId)}</section>`;
 }
 function refreshCommentBlocks(){
   document.querySelectorAll('[data-comment-list]').forEach(el => {
@@ -407,7 +408,7 @@ function refreshCommentBlocks(){
     const [targetType, ...rest] = key.split('|');
     const targetId = rest.join('|');
     const expanded = el.dataset.expanded === '1';
-    el.innerHTML = renderCommentsListMarkup(commentsForTarget(targetType, targetId), { limit:5, expanded });
+    el.innerHTML = renderCommentsListMarkup(commentsForTarget(targetType, targetId), { limit:3, expanded });
   });
 }
 async function persistComment(payload){
@@ -698,12 +699,16 @@ function renderEventCard(host, label, event, emptyText){
         <div class="commentUtilityWrap"></div>
         <div class="cardDetails__grid">
           <div>
-            <div class="label">Stage layout</div>
+            <div class="label">Band plan</div>
             <div class="inlineStageToolbar">
               <button class="pillBtn openStageBtn" data-open-stage="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">stadia_controller</span><span>Open full layout</span></button>
-              <span class="inlineStageHint">Swimlane preview</span>
+              <label class="prettyToggle">
+                <input type="checkbox" data-stage-pretty-toggle="${escapeHtml(event.event_id)}">
+                <span>Pretty layout</span>
+              </label>
             </div>
-            <div class="inlineStageBox" id="stage-preview-${escapeHtml(event.event_id)}"></div>
+            <div class="inlineStageHint">Compact list first. Tick “Pretty layout” to bring back the swimlane cards.</div>
+            <div class="inlineStageBox inlineStageBox--compactFirst" id="stage-preview-${escapeHtml(event.event_id)}"></div>
           </div>
           <div>
             <div class="label">${detailTitle}</div>
@@ -748,6 +753,7 @@ function renderEventCard(host, label, event, emptyText){
             <div class="eventShowcase__action eventShowcase__action--buttons"><button class="eventShowcase__detailsBtn" type="button" data-open-details="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">expand_more</span><span>Details</span></button></div>
           </div>
           ${renderShowcaseResponseReminder(response)}
+          ${renderShowcaseBandPlan(event, label)}
 ${detailsHtml}
         </div>
       </div>
@@ -988,12 +994,9 @@ function openStageForEvent(eventId, mode = null){
   window.scrollTo({top:0, behavior:"smooth"});
 }
 function hydrateCardStagePreview(eventId){
-  const host = document.getElementById(`stage-preview-${eventId}`);
-  if(!host) return;
   const event = (state.events || []).find(e => String(e.event_id) === String(eventId));
-  const chairs = chairsForEvent(event);
-  const assignments = assignmentsForEvent(event);
-  renderInlineSwimlaneTable(host, chairs, assignments, eventId);
+  const defaultMode = event && String(event.band_type || '').toLowerCase() === 'main' ? 'compact' : 'pretty';
+  setInlineStagePreviewMode(eventId, defaultMode);
 }
 
 
@@ -1005,6 +1008,72 @@ function renderInlineStageTable(host, chairs, assignments, eventId){
 function renderInlineSwimlaneTable(host, chairs, assignments, eventId){
   if(!host) return;
   renderStageSwimlaneTable(host, chairs, assignments, eventId);
+}
+
+function compactStageSectionLabel(section){
+  const raw = String(section || 'Band').trim();
+  const low = raw.toLowerCase();
+  if(low.includes('soprano')) return 'SOP';
+  if(low.includes('front') && low.includes('cornet')) return 'FR CORNET';
+  if(low === 'repiano' || low.includes('repiano')) return 'REP';
+  if(low.includes('flugel')) return 'FLUGEL';
+  if(low.includes('solo') && low.includes('cornet')) return 'SOLO';
+  if(low.includes('horn')) return 'HORN';
+  if(low.includes('baritone')) return 'BARI';
+  if(low.includes('euphon')) return 'EUPH';
+  if(low.includes('trombone')) return 'TBONE';
+  if(low.includes('bass')) return 'BASS';
+  if(low.includes('percussion')) return 'PERC';
+  return raw.toUpperCase();
+}
+
+function buildCompactStageMarkup(chairs, assignments){
+  const groups = chairsGroupedBySection(chairs || []);
+  const assignmentsByChair = chairAssignmentsByCode(assignments || []);
+  const lines = groups.map(([section, items]) => {
+    const parts = items.map(ch => {
+      const members = membersForChair(assignmentsByChair, ch.chair_code);
+      const names = members.length
+        ? members.map(m => `<span>${bbhubCompactPlayerName(stageMemberLabel(m))}</span>`).join(', ')
+        : '<span class="compactBand__vacant">Vacant</span>';
+      const code = String(ch.display_short || ch.chair_code || '').trim();
+      return items.length === 1 ? names : `<span class="compactBand__chairCode">${escapeHtml(code.toLowerCase())}</span>:${names}`;
+    }).join(', ');
+    return `<div class="compactBand__line"><span class="compactBand__group">${escapeHtml(compactStageSectionLabel(section))}</span><span class="compactBand__sep">|</span><span class="compactBand__players">${parts}</span></div>`;
+  }).join('');
+  return `<div class="compactBand">${lines || `<div class="empty">No seating loaded.</div>`}</div>`;
+}
+
+function renderInlineCompactStage(host, chairs, assignments, eventId){
+  if(!host) return;
+  host.innerHTML = buildCompactStageMarkup(chairs, assignments);
+}
+
+function renderShowcaseBandPlan(event, label){
+  const isNextMainGig = label === "NEXT GIG" && String(event?.band_type || '').toLowerCase() === 'main';
+  if(!isNextMainGig) return '';
+  const chairs = chairsForEvent(event);
+  if(!chairs.length) return '';
+  const assignments = assignmentsForEvent(event);
+  return `
+    <div class="eventShowcase__bandPlan">
+      <div class="eventShowcase__bandPlanTitle">Band plan</div>
+      ${buildCompactStageMarkup(chairs, assignments)}
+    </div>`;
+}
+
+function setInlineStagePreviewMode(eventId, mode){
+  const host = document.getElementById(`stage-preview-${eventId}`);
+  if(!host) return;
+  const event = (state.events || []).find(e => String(e.event_id) === String(eventId));
+  const chairs = chairsForEvent(event);
+  const assignments = assignmentsForEvent(event);
+  const resolved = mode === 'pretty' ? 'pretty' : 'compact';
+  host.dataset.previewMode = resolved;
+  const toggle = document.querySelector(`[data-stage-pretty-toggle="${CSS.escape(String(eventId))}"]`);
+  if(toggle) toggle.checked = resolved === 'pretty';
+  if(resolved === 'pretty') renderInlineSwimlaneTable(host, chairs, assignments, eventId);
+  else renderInlineCompactStage(host, chairs, assignments, eventId);
 }
 
 
@@ -1523,6 +1592,13 @@ async function persistRsvp(eventId, status){
 
 function bindHomeDelegates(){
   document.addEventListener("change", (ev) => {
+    const prettyToggle = ev.target.closest('[data-stage-pretty-toggle]');
+    if(prettyToggle){
+      const eventId = prettyToggle.dataset.stagePrettyToggle || '';
+      setInlineStagePreviewMode(eventId, prettyToggle.checked ? 'pretty' : 'compact');
+      return;
+    }
+
     const bandCheck = ev.target.closest(".heroBandCheck");
     if(bandCheck && !currentMember()){
       const selected = Array.from(document.querySelectorAll(".heroBandCheck:checked")).map(el => el.dataset.bandType).filter(Boolean);
@@ -1647,6 +1723,13 @@ function bindHomeDelegates(){
       return;
     }
 
+    const prettyToggle = ev.target.closest('[data-stage-pretty-toggle]');
+    if(prettyToggle){
+      const eventId = prettyToggle.dataset.stagePrettyToggle || '';
+      setInlineStagePreviewMode(eventId, prettyToggle.checked ? 'pretty' : 'compact');
+      return;
+    }
+
     const openStageBtn = ev.target.closest(".openStageBtn");
     if(openStageBtn){
       openStageForEvent(openStageBtn.dataset.openStage || "", "swimlane");
@@ -1675,6 +1758,8 @@ function bindLoginUi(){
     const box = $("loginResult");
     if(!member){ box.className = "loginResult muted"; box.textContent = "No member matched that code."; return; }
     Auth.saveUser(member);
+        const dlg = $("loginDialog");
+        if (dlg && dlg.open) dlg.close();
     state.session = Auth.loadUser();
     updateGreeting();
     setInterval(updateGreeting, 30000);
@@ -1748,7 +1833,7 @@ const plannerIgnoreLegacy = $("plannerIgnoreRehearsalsToggle");
 });
   setStageMode(state.stageMode);
   document.querySelectorAll(".segBtn").forEach(btn => btn.addEventListener("click", () => {
-    setStageMode(btn.dataset.stageMode || "swimlane");
+    setStageMode(btn.dataset.stageMode || "graphic");
     renderStage();
   }));
 if(plannerIgnore){
@@ -1813,12 +1898,27 @@ if(plannerTimelineInclude){
 
 async function start(){
   showLoading();
+  const t0 = performance.now();
+  const timings = {
+    startedAt: new Date().toISOString(),
+    authMs: 0,
+    loadDataMs: 0,
+    statePrepMs: 0,
+    renderHomeMs: 0,
+    totalMs: 0
+  };
   try{
+    const tAuth0 = performance.now();
     state.session = Auth.loadUser();
+    timings.authMs = Math.round(performance.now() - tAuth0);
     updateGreeting();
     setInterval(updateGreeting, 30000);
 
+    const tLoad0 = performance.now();
     const data = await loadData();
+    timings.loadDataMs = Math.round(performance.now() - tLoad0);
+
+    const tPrep0 = performance.now();
     state.source = data.source || "unknown";
     state.members = data.members || [];
     state.rawEvents = data.rawEvents || [];
@@ -1830,23 +1930,31 @@ async function start(){
     state.bandChairs = data.bandChairs || [];
     state.assignments = data.assignments || [];
     state.bands = data.bands || [];
+    timings.statePrepMs = Math.round(performance.now() - tPrep0);
 
     updateSummary();
-    setStatus(`Loaded (${state.source}) — ${new Date().toLocaleString()}`);
+    const tRender0 = performance.now();
     renderHome();
-    renderMatrixHome();
-    renderPlanner();
+    timings.renderHomeMs = Math.round(performance.now() - tRender0);
+    timings.totalMs = Math.round(performance.now() - t0);
+    state.debugTimings = timings;
+
+    setStatus(`Loaded (${state.source}) in ${(timings.totalMs / 1000).toFixed(2)}s — ${new Date().toLocaleString()}`);
     if(DEBUG) renderDebugPanel(state);
+    console.log("BBHub timings", timings);
 
     setInterval(() => {
       renderHome();
       if(document.querySelector("#view-stage.active")) renderStage();
+      if(DEBUG) renderDebugPanel(state);
     }, 60000);
 
   } catch(err){
+    state.debugTimings = { ...timings, totalMs: Math.round(performance.now() - t0), error: err?.message || String(err) };
+    if(DEBUG) renderDebugPanel(state);
     setStatus(`Load failed: ${err.message}`);
   } finally {
-    hideLoading();
+    requestAnimationFrame(() => hideLoading());
   }
 }
 

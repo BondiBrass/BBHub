@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>BBHub Test Harness</title>
+<style>
+body { margin:0; font-family:Arial; display:flex; height:100vh; }
+.panel { flex:1; display:flex; flex-direction:column; border-right:1px solid #ccc; }
+.header { padding:6px; background:#f5f5f5; }
+iframe { flex:1; border:none; }
+input, button { margin:2px; }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="header">
+    Mobile URL <input id="url1" value="http://127.0.0.1:5500/index.html">
+    Width <input type="range" min="300" max="600" value="375" id="w1">
+  </div>
+  <iframe id="frame1"></iframe>
+</div>
+
+<div class="panel">
+  <div class="header">
+    Tablet URL <input id="url2" value="http://127.0.0.1:5500/index.html">
+    Width <input type="range" min="600" max="1200" value="768" id="w2">
+  </div>
+  <iframe id="frame2"></iframe>
+</div>
+
+<div class="panel">
+  <div class="header">
+    Comments Sheet
+    <button onclick="reload()">Refresh</button>
+  </div>
+  <iframe id="sheet"
+    src="https://docs.google.com/spreadsheets/d/1zoZQIqg0etERrnjMwnQKY72OyX43hEn76KEH-oLrNdo/edit?gid=290104788#gid=290104788">
+
+  </iframe>
+</div>
+
+<script>
+function init(){
+  frame1.src = url1.value;
+  frame2.src = url2.value;
+  frame1.style.width = w1.value + 'px';
+  frame2.style.width = w2.value + 'px';
+}
+
+w1.oninput = ()=> frame1.style.width = w1.value + 'px';
+w2.oninput = ()=> frame2.style.width = w2.value + 'px';
+
+function reload(){
+  document.getElementById('sheet').src += '';
+}
+
+url1.onchange = init;
+url2.onchange = init;
+
+init();
+</script>
+
+</body>
+</html>
