@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>BBHub : Mobile Run Sheet - proto only</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="light">
+  <div class="app-shell">
+    <header class="hero">
+      <div class="hero__top">
+        <div>
+          <div class="eyebrow">BBHub</div>
+          <h1>Mobile Run Sheet</h1>
+          <p>Build fast, tweak on the fly, then show everyone the live order.</p>
+        </div>
+        <button class="theme-btn" id="themeBtn" title="Toggle light and dark mode">🌗</button>
+      </div>
+      <div class="hero__meta">
+        <div class="hero-stat">
+          <div class="hero-stat__label">Total time</div>
+          <div class="hero-stat__value" id="totalTimeHero">0m</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat__label">Items</div>
+          <div class="hero-stat__value" id="itemCountHero">0</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat__label">Max program</div>
+          <div class="hero-stat__value" id="maxTimeHero">60m</div>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel__head">
+        <div>
+          <h2>⚡ Quick line</h2>
+          <p>Fast typers can go line-by-line. Press Enter to add instantly.</p>
+        </div>
+      </div>
+      <div class="quickline-row">
+        <input id="quickLine" type="text" placeholder="music|New Item|3|note1|note2" />
+        <button class="btn btn--primary" id="addQuickLineBtn">+ Add</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <div>
+          <h2>Quick add</h2>
+          <p>Tap a pill to add a starter item and keep moving.</p>
+        </div>
+      </div>
+      <div class="pill-row">
+        <button class="pill pill--music" data-quick-type="music">+ Music</button>
+        <button class="pill pill--spoken" data-quick-type="spoken">+ Speech</button>
+        <button class="pill pill--break" data-quick-type="break">+ Break</button>
+        <button class="pill pill--march" data-quick-type="march">+ March</button>
+        <button class="pill pill--other" data-quick-type="other">+ Other</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <div>
+          <h2>Paste / edit source</h2>
+          <p>This raw list is the source you can copy, share, paste back in, or send to someone else.</p>
+        </div>
+      </div>
+
+      <textarea id="rawInput">music|Scipio|3|
+music|Prelude to a Solemn Occasion|4|
+music|Ashokan Farewell|4|
+spoken|Welcome to country|4|
+music|(Sacred Masterpieces). |10|2-3 x each|Watch for hymn number and cues
+music|Last Post|2|
+spoken|Lest we Forget    xxsxxx|4|
+music|Reveille|2|
+music|New Zealand National Anthem|2|Intro last 4 bars. 2-beat pauses. |2 verses
+music|Australian National Anthem|2|No rall until end 2nd verse.
+spoken|Catafolk|8|
+music|1914 March|4|4
+music|I Still Call Australia Home|4|</textarea>
+
+      <div class="action-row">
+        <button class="btn" id="clearBtn">Clear</button>
+        <select id="sampleSelect">
+          <option value="music">Samples: Music</option>
+          <option value="business">Samples: Business</option>
+          <option value="presentation">Samples: Presentation</option>
+        </select>
+        <button class="btn" id="loadSampleBtn">Load sample</button>
+        <button class="btn btn--primary" id="buildBtn">Make my list</button>
+        <button class="btn" id="copyBtn">📋 Copy</button>
+        <button class="btn" id="shareBtn">📤 Share</button>
+      </div>
+      <div class="mini-note" id="copyStatus"></div>
+    </section>
+
+    <section class="panel panel--stats">
+      <div class="panel__head">
+        <div>
+          <h2>Program settings</h2>
+          <p>Keep an eye on timing and see whether you are running long.</p>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <label class="field">
+          <span>Max program time (mins)</span>
+          <input type="number" id="maxTimeInput" value="60" min="0" step="1" />
+        </label>
+        <div class="summary-tile">
+          <div class="summary-tile__label">Current total</div>
+          <div class="summary-tile__value" id="totalTimeBox">0 mins</div>
+        </div>
+        <div class="summary-tile">
+          <div class="summary-tile__label">Program status</div>
+          <div class="summary-tile__value" id="programState">Within limit</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel__head">
+        <div>
+          <h2>Program editor</h2>
+          <p>Tap a row to open details. Only one opens at a time to keep it tidy on mobile.</p>
+        </div>
+      </div>
+      <div id="list" class="list"></div>
+    </section>
+
+    <button class="live-toggle" id="liveToggleBtn">🎬 Show Live Mode</button>
+
+    <section id="livePanel" class="live-panel hidden">
+      <div class="live-panel__header">
+        <div>
+          <div class="live-label">NOW</div>
+          <div class="live-now" id="liveNow">-</div>
+          <div class="live-meta" id="liveNowMeta"></div>
+        </div>
+      </div>
+
+      <div class="live-next-wrap">
+        <div class="live-label">NEXT</div>
+        <div class="live-next" id="liveNext">-</div>
+      </div>
+
+      <div class="live-controls">
+        <button class="btn btn--live" id="prevBtn">◀ Back</button>
+        <button class="btn btn--live btn--live-primary" id="nextBtn">Next ▶</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
