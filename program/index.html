@@ -13,13 +13,13 @@
         <div>
           <div class="eyebrow">BBHub</div>
           <h1>Mobile Run Sheet</h1>
-          <p>Build fast, tweak on the fly, then show everyone the live order.</p>
+          <p>Build fast. Tweak on-the-fly. Run live.</p>
         </div>
         <button class="theme-btn" id="themeBtn" title="Toggle light and dark mode">🌗</button>
       </div>
       <div class="hero__meta">
         <div class="hero-stat">
-          <div class="hero-stat__label">Total time</div>
+          <div class="hero-stat__label">Total</div>
           <div class="hero-stat__value" id="totalTimeHero">0m</div>
         </div>
         <div class="hero-stat">
@@ -27,7 +27,7 @@
           <div class="hero-stat__value" id="itemCountHero">0</div>
         </div>
         <div class="hero-stat">
-          <div class="hero-stat__label">Max program</div>
+          <div class="hero-stat__label">Max</div>
           <div class="hero-stat__value" id="maxTimeHero">60m</div>
         </div>
       </div>
@@ -37,11 +37,11 @@
       <div class="panel__head">
         <div>
           <h2>⚡ Quick line</h2>
-          <p>Fast typers can go line-by-line. Press Enter to add instantly.</p>
+          <p>Format: <code>type|title|duration(mins)|note1|note2</code></p>
         </div>
       </div>
       <div class="quickline-row">
-        <input id="quickLine" type="text" placeholder="music|New Item|3|note1|note2" />
+        <input id="quickLine" type="text" placeholder="music|New Item|3" />
         <button class="btn btn--primary" id="addQuickLineBtn">+ Add</button>
       </div>
     </section>
@@ -50,23 +50,22 @@
       <div class="panel__head">
         <div>
           <h2>Quick add</h2>
-          <p>Tap a pill to add a starter item and keep moving.</p>
+          <p>Tap a pill to add a starter item. Missing durations default to 2 and get highlighted.</p>
         </div>
       </div>
       <div class="pill-row">
         <button class="pill pill--music" data-quick-type="music">+ Music</button>
         <button class="pill pill--spoken" data-quick-type="spoken">+ Speech</button>
         <button class="pill pill--break" data-quick-type="break">+ Break</button>
-        <button class="pill pill--march" data-quick-type="march">+ March</button>
-        <button class="pill pill--other" data-quick-type="other">+ Other</button>
+                <button class="pill pill--other" data-quick-type="other">+ Other</button>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel__head">
         <div>
-          <h2>Paste / edit source</h2>
-          <p>This raw list is the source you can copy, share, paste back in, or send to someone else.</p>
+          <h2>Paste / edit [0]</h2>
+          <p>This raw list is the source of truth. Changes here now update the app live.</p>
         </div>
       </div>
 
@@ -86,13 +85,13 @@ music|I Still Call Australia Home|4|</textarea>
 
       <div class="action-row">
         <button class="btn" id="clearBtn">Clear</button>
-        <select id="sampleSelect">
+        <select id="sampleSelect" onchange="loadSelectedSample()">
           <option value="music">Samples: Music</option>
           <option value="business">Samples: Business</option>
           <option value="presentation">Samples: Presentation</option>
+          <option value="rock">Samples: Rock Band</option>
         </select>
-        <button class="btn" id="loadSampleBtn">Load sample</button>
-        <button class="btn btn--primary" id="buildBtn">Make my list</button>
+                <button class="btn btn--primary" id="buildBtn">Make my list</button>
         <button class="btn" id="copyBtn">📋 Copy</button>
         <button class="btn" id="shareBtn">📤 Share</button>
       </div>
@@ -103,10 +102,18 @@ music|I Still Call Australia Home|4|</textarea>
       <div class="panel__head">
         <div>
           <h2>Program settings</h2>
-          <p>Keep an eye on timing and see whether you are running long.</p>
+          <p>Keep an eye on timing and whether you are running long.</p>
         </div>
       </div>
-      <div class="stats-grid">
+      <div class="stats-grid stats-grid--wide">
+        <label class="field">
+          <span>Program label</span>
+          <input type="text" id="programLabelInput" value="BBHub Mobile Run Sheet" />
+        </label>
+        <label class="field">
+          <span>Date</span>
+          <input type="date" id="programDateInput" value="2026-06-23" />
+        </label>
         <label class="field">
           <span>Max program time (mins)</span>
           <input type="number" id="maxTimeInput" value="60" min="0" step="1" />
@@ -120,28 +127,48 @@ music|I Still Call Australia Home|4|</textarea>
           <div class="summary-tile__value" id="programState">Within limit</div>
         </div>
       </div>
+          <div class="settings-actions">
+        
+      </div>
     </section>
 
+
+
+    <section id="finalPanel" class="final-panel">
+      <div class="final-toolbar">
+        <button class="btn btn--primary" id="editFromFinalBtn">✏️ Edit</button>
+        <button class="btn" id="copyPrettyBtn">📋 Copy final list</button>
+        <button class="btn" id="printBtn">🖨 Print / PDF</button>
+      </div>
+      <div class="final-sheet" id="finalSheet">
+        <div class="final-sheet__header">
+          <div class="final-kicker">Run Sheet</div>
+          <h2 id="finalTitle">BBHub Mobile Run Sheet</h2>
+          <div class="final-sub" id="finalSub">Total 0 mins · 0 items</div>
+        </div>
+        <div id="finalList" class="final-list"></div>
+      </div>
+    </section>
+  
     <section class="panel">
       <div class="panel__head">
         <div>
-          <h2>Program editor</h2>
-          <p>Tap a row to open details. Only one opens at a time to keep it tidy on mobile.</p>
+          <h2>Run Sheet</h2>
+          <p>Program editor uses a distinct background. Tap a row to open the form view.</p>
         </div>
       </div>
       <div id="list" class="list"></div>
     </section>
 
-    <button class="live-toggle" id="liveToggleBtn">🎬 Show Live Mode</button>
+    <div class="view-actions">
+      <button class="live-toggle" id="liveToggleBtn">🎬 Show Live Mode</button>
+      
+    </div>
 
     <section id="livePanel" class="live-panel hidden">
-      <div class="live-panel__header">
-        <div>
-          <div class="live-label">NOW</div>
-          <div class="live-now" id="liveNow">-</div>
-          <div class="live-meta" id="liveNowMeta"></div>
-        </div>
-      </div>
+      <div class="live-label">NOW</div>
+      <div class="live-now" id="liveNow">-</div>
+      <div class="live-meta" id="liveNowMeta"></div>
 
       <div class="live-next-wrap">
         <div class="live-label">NEXT</div>
@@ -153,7 +180,7 @@ music|I Still Call Australia Home|4|</textarea>
         <button class="btn btn--live btn--live-primary" id="nextBtn">Next ▶</button>
       </div>
     </section>
-  </div>
+</div>
 
   <script src="script.js"></script>
 </body>
