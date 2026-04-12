@@ -1033,11 +1033,14 @@ function buildCompactStageMarkup(chairs, assignments){
   const lines = groups.map(([section, items]) => {
     const parts = items.map(ch => {
       const members = membersForChair(assignmentsByChair, ch.chair_code);
+      const isVacant = !members.length;
       const names = members.length
         ? members.map(m => `<span>${bbhubCompactPlayerName(stageMemberLabel(m))}</span>`).join(', ')
         : '<span class="compactBand__vacant">Vacant</span>';
-      const code = String(ch.display_short || ch.chair_code || '').trim();
-      return items.length === 1 ? names : `<span class="compactBand__chairCode">${escapeHtml(code.toLowerCase())}</span>:${names}`;
+      const code = String(ch.display_short || ch.chair_code || '').trim().toLowerCase();
+      if(items.length === 1) return names;
+      const chairCode = `<span class="compactBand__chairCode${isVacant ? ' compactBand__chairCode--vacant' : ''}">${escapeHtml(code)}</span>`;
+      return `<span class="compactBand__chairChunk${isVacant ? ' compactBand__chairChunk--vacant' : ''}">${chairCode}:${names}</span>`;
     }).join(', ');
     return `<div class="compactBand__line"><span class="compactBand__group">${escapeHtml(compactStageSectionLabel(section))}</span><span class="compactBand__sep">|</span><span class="compactBand__players">${parts}</span></div>`;
   }).join('');
@@ -1049,16 +1052,124 @@ function renderInlineCompactStage(host, chairs, assignments, eventId){
   host.innerHTML = buildCompactStageMarkup(chairs, assignments);
 }
 
+function showcasePlanPalette(sectionName, instrumentName){
+  const cls = bbhubSeatSectionClass(sectionName, instrumentName);
+  const map = {
+    'seat--soprano': { fill:'#dbeafe', stroke:'#2563eb', text:'#1e3a8a' },
+    'seat--cornet': { fill:'#dbeafe', stroke:'#3b82f6', text:'#1d4ed8' },
+    'seat--flugel': { fill:'#cffafe', stroke:'#06b6d4', text:'#155e75' },
+    'seat--horn': { fill:'#f3e8ff', stroke:'#9333ea', text:'#6b21a8' },
+    'seat--euph': { fill:'#d1fae5', stroke:'#14b8a6', text:'#0f766e' },
+    'seat--bari': { fill:'#d1fae5', stroke:'#10b981', text:'#065f46' },
+    'seat--tbone': { fill:'#e2e8f0', stroke:'#64748b', text:'#334155' },
+    'seat--bass': { fill:'#dcfce7', stroke:'#16a34a', text:'#166534' },
+    'seat--perc': { fill:'#fee2e2', stroke:'#ef4444', text:'#991b1b' },
+    'seat--staff': { fill:'#fef3c7', stroke:'#a16207', text:'#854d0e' },
+    'seat--guest': { fill:'#ede9fe', stroke:'#7c3aed', text:'#5b21b6' },
+    'seat--default': { fill:'#e2e8f0', stroke:'#94a3b8', text:'#334155' }
+  };
+  return map[cls] || map['seat--default'];
+}
+
+
+function renderShowcasePlanMarkup(chairs, assignments, eventId){
+  const items = (chairs || []).map(normalizeChair).filter(Boolean);
+  if(!items.length) return '<div class="eventShowcase__emptyPlan">No seating loaded.</div>';
+  const assignmentsByChair = chairAssignmentsByCode(assignments || []);
+  const seatR = 28;
+  const labelGap = 44;
+  const minX = Math.min(...items.map(ch => Number(ch.default_x || 0))) - seatR - 18;
+  const maxX = Math.max(...items.map(ch => Number(ch.default_x || 0))) + seatR + 18;
+  const minY = Math.min(...items.map(ch => Number(ch.default_y || 0))) - seatR - 26;
+  const maxY = Math.max(...items.map(ch => Number(ch.default_y || 0))) + seatR + labelGap;
+  const width = Math.max(260, maxX - minX);
+  const height = Math.max(180, maxY - minY);
+  const pad = 18;
+  const viewBox = `${minX - pad} ${minY - pad} ${width + pad * 2} ${height + pad * 2}`;
+
+  const parts = [];
+  parts.push(`<svg class="eventShowcase__planSvg" viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Band seating plan">`);
+  parts.push(`<rect x="${minX - 8}" y="${minY - 8}" width="${width + 16}" height="${height + 16}" rx="26" fill="rgba(248,250,252,.98)" stroke="rgba(148,163,184,.28)"/>`);
+
+  for(const ch of items){
+    const members = membersForChair(assignmentsByChair, ch.chair_code);
+    const statusInfo = chairStatusInfo(eventId, members);
+    const seatFill = stageFill(statusInfo.code);
+    const isAlert = statusInfo.code === 'N';
+    const names = members.slice(0, 3).map(member => stageMemberLabel(member));
+    const title = chairMembersTitle(ch.chair_label || ch.display_short || ch.chair_code || 'Chair', members, eventId);
+    parts.push(`<g class="eventShowcase__planSeat ${isAlert ? 'eventShowcase__planSeat--vacant' : 'eventShowcase__planSeat--filled'} ${bbhubSeatSectionClass(ch.section, ch.chair_label || ch.instrument || '')}" data-status="${statusInfo.code}" transform="translate(${Number(ch.default_x || 0)},${Number(ch.default_y || 0)})">`);
+    parts.push(`<title>${escapeHtml(title)}</title>`);
+    parts.push(`<circle r="30" fill="${seatFill}" stroke="${isAlert ? '#d32f2f' : 'rgba(16,24,39,.22)'}" stroke-width="${isAlert ? '3.2' : '2'}"/>`);
+    parts.push(`<circle r="34" fill="none" stroke="${isAlert ? 'rgba(211,47,47,.42)' : 'rgba(15,23,42,.06)'}" stroke-width="${isAlert ? '5' : '3'}"/>`);
+    parts.push(`<text class="eventShowcase__planCode" text-anchor="middle" y="-12">${escapeHtml(ch.display_short || ch.chair_code || '')}</text>`);
+    if(names.length){
+      names.forEach((name, idx) => {
+        parts.push(`<text class="eventShowcase__planName" text-anchor="middle" y="${2 + idx * 11}">${escapeHtml(name)}</text>`);
+      });
+      if(members.length > 3){
+        parts.push(`<text class="eventShowcase__planMore" text-anchor="middle" y="${2 + 3 * 11}">+${members.length - 3}</text>`);
+      }
+    } else {
+      parts.push(`<text class="eventShowcase__planVacant" text-anchor="middle" y="8">Vacant</text>`);
+    }
+    parts.push(`<text class="eventShowcase__planLabel" text-anchor="middle" y="48">${escapeHtml(ch.chair_label || ch.instrument || '')}</text>`);
+    parts.push(`</g>`);
+  }
+
+  parts.push(`</svg>`);
+  return parts.join('');
+}
+
 function renderShowcaseBandPlan(event, label){
   const isNextMainGig = label === "NEXT GIG" && String(event?.band_type || '').toLowerCase() === 'main';
   if(!isNextMainGig) return '';
   const chairs = chairsForEvent(event);
   if(!chairs.length) return '';
   const assignments = assignmentsForEvent(event);
+  const eventId = escapeHtml(event.event_id);
   return `
     <div class="eventShowcase__bandPlan">
       <div class="eventShowcase__bandPlanTitle">Band plan</div>
-      ${buildCompactStageMarkup(chairs, assignments)}
+      <div class="eventShowcase__bandGraphicWrap">
+        <div class="eventShowcase__bandGraphicHead">
+          <div class="eventShowcase__bandGraphicTitle">Seating view</div>
+          <div class="eventShowcase__bandLegend" aria-label="Section colours">
+            <span class="eventShowcase__legendItem"><i class="seatLegendDot seatLegendDot--cornet"></i>Cornets</span>
+            <span class="eventShowcase__legendItem"><i class="seatLegendDot seatLegendDot--horn"></i>Horns</span>
+            <span class="eventShowcase__legendItem"><i class="seatLegendDot seatLegendDot--low"></i>Low brass</span>
+            <span class="eventShowcase__legendItem"><i class="seatLegendDot seatLegendDot--perc"></i>Perc</span>
+          </div>
+        </div>
+        <div class="eventShowcase__viewTabs" role="tablist" aria-label="Band plan view">
+          <button class="eventShowcase__viewTab is-active" type="button" data-showcase-view-tab="${eventId}" data-view="plan" aria-pressed="true">Plan</button>
+          <button class="eventShowcase__viewTab" type="button" data-showcase-view-tab="${eventId}" data-view="swimlane" aria-pressed="false">Swimlane</button>
+          <button class="eventShowcase__viewTab" type="button" data-showcase-view-tab="${eventId}" data-view="table" aria-pressed="false">Table</button>
+        </div>
+        <div class="eventShowcase__viewPanel is-active" data-showcase-view-panel="${eventId}" data-view="plan">
+          ${renderShowcasePlanMarkup(chairs, assignments, event.event_id)}
+        </div>
+        <div class="eventShowcase__viewPanel" data-showcase-view-panel="${eventId}" data-view="swimlane">
+          <div class="eventShowcase__swimlaneWrap">
+            <div class="eventShowcase__swimlaneToolbar">
+              <div class="inlineStageHint">Compact list first. Tick “Pretty layout” to bring back the swimlane cards.</div>
+              <label class="prettyToggle prettyToggle--showcase">
+                <input type="checkbox" class="eventShowcase__prettyToggle" data-showcase-pretty-toggle="${eventId}">
+                <span>Pretty layout</span>
+              </label>
+            </div>
+            <div class="eventShowcase__swimlaneCompact is-active" data-showcase-swimlane-compact="${eventId}">
+              ${buildCompactStageMarkup(chairs, assignments)}
+            </div>
+            <div class="eventShowcase__swimlanePretty" data-showcase-swimlane-pretty="${eventId}">
+              ${renderSwimlaneTableMarkup(chairs, assignments, event.event_id, { showcase:true })}
+            </div>
+          </div>
+        </div>
+        <div class="eventShowcase__viewPanel" data-showcase-view-panel="${eventId}" data-view="table">
+          ${renderStageTableMarkup(chairs, assignments, event.event_id, true)}
+        </div>
+      </div>
     </div>`;
 }
 
@@ -1730,9 +1841,41 @@ function bindHomeDelegates(){
       return;
     }
 
+    const showcaseTab = ev.target.closest('[data-showcase-view-tab]');
+    if(showcaseTab){
+      const eventId = showcaseTab.dataset.showcaseViewTab || '';
+      const view = showcaseTab.dataset.view || 'plan';
+      const root = showcaseTab.closest('.eventShowcase__bandGraphicWrap');
+      if(root){
+        root.querySelectorAll('[data-showcase-view-tab]').forEach(btn => {
+          const active = btn === showcaseTab;
+          btn.classList.toggle('is-active', active);
+          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        root.querySelectorAll(`[data-showcase-view-panel="${CSS.escape(String(eventId))}"]`).forEach(panel => {
+          panel.classList.toggle('is-active', panel.dataset.view === view);
+        });
+      }
+      return;
+    }
+
+    const showcasePrettyToggle = ev.target.closest('[data-showcase-pretty-toggle]');
+    if(showcasePrettyToggle){
+      const eventId = showcasePrettyToggle.dataset.showcasePrettyToggle || '';
+      const root = showcasePrettyToggle.closest('.eventShowcase__swimlaneWrap');
+      if(root){
+        const compact = root.querySelector(`[data-showcase-swimlane-compact="${CSS.escape(String(eventId))}"]`);
+        const pretty = root.querySelector(`[data-showcase-swimlane-pretty="${CSS.escape(String(eventId))}"]`);
+        const active = !!showcasePrettyToggle.checked;
+        if(compact) compact.classList.toggle('is-hidden', active);
+        if(pretty) pretty.classList.toggle('is-active', active);
+      }
+      return;
+    }
+
     const openStageBtn = ev.target.closest(".openStageBtn");
     if(openStageBtn){
-      openStageForEvent(openStageBtn.dataset.openStage || "", "swimlane");
+      openStageForEvent(openStageBtn.dataset.openStage || "", "plan");
       return;
     }
 
