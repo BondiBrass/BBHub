@@ -2,8 +2,9 @@ import * as Auth from "./auth.js";
 import { DEBUG, findNext, normalizeEvent, renderDebugPanel } from "./debug.js";
 import { clearApiDebugLog, getApiDebugLog, loadData, saveCommentResponse, saveRsvpResponse, subscribeApiDebugLog } from "./sheets.js";
 import { compactFromNowLabel, escapeHtml, formatEventDateParts } from "./utils.js";
+import { BBHUB_CONFIG } from "./config.js";
 
-
+const routeParams = new URLSearchParams(window.location.search);
 
 const state = {
   source:"unknown", members:[], rawEvents:[], events:[], program:[], pieces:[],
@@ -11,7 +12,11 @@ const state = {
   selectedEventId:"", savingRsvp:false, stageMode:(localStorage.getItem("bbhub.stageMode") || "graphic"), stageViewBox:{x:0,y:0,w:1000,h:760},
   ignoreRehearsals: localStorage.getItem("bbhub.ignoreRehearsals") === "1",
   guestBandFilter: JSON.parse(localStorage.getItem("bbhub.guestBandFilter") || "[]"),
-  debugTimings: {}
+  debugTimings: {},
+  route: {
+    eventId: routeParams.get("event") || "",
+    view: routeParams.get("view") || (routeParams.get("event") ? "public" : "normal")
+  }
 };
 
 function $(id){ return document.getElementById(id); }
@@ -22,6 +27,91 @@ function formatApiDebugValue(value){
   if(value == null || value === "") return "";
   if(typeof value === "string") return value;
   try{ return JSON.stringify(value, null, 2); }catch(_e){ return String(value); }
+}
+
+function isPublicEventRoute(){
+  return !!state.route.eventId && state.route.view === "public";
+}
+function publicEventLink(eventId){
+  return `./?event=${encodeURIComponent(String(eventId || ""))}`;
+}
+function formatPublicEventDate(value){
+  const d = value ? new Date(value) : null;
+  if(!d || Number.isNaN(+d)) return "Date TBC";
+  return d.toLocaleString("en-AU", { weekday:"short", day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+}
+function renderAboutContent(){
+  const host = $("aboutContent");
+  if(!host) return;
+  host.innerHTML = `
+    <div class="aboutRow"><strong>Version number</strong><span>${escapeHtml(BBHUB_CONFIG.VERSION || "")}</span></div>
+    <div class="aboutRow"><strong>Last updated</strong><span>${escapeHtml(BBHUB_CONFIG.LAST_UPDATED || "")}</span></div>
+    <div class="aboutRow"><strong>Contact email</strong><span><a href="mailto:${escapeHtml(BBHUB_CONFIG.CONTACT_EMAIL || "")}">${escapeHtml(BBHUB_CONFIG.CONTACT_EMAIL || "")}</a></span></div>
+    <div class="aboutFooter">${escapeHtml(BBHUB_CONFIG.APP_TITLE || "BBHub")}</div>
+  `;
+}
+function applyPublicRestrictions(root = document){
+  root.querySelectorAll('.responseMini, .loginPromptBtn, .miniRsvpOnly, .responseMatrixWrap, .saveRow, [data-save-comment="1"], .commentComposer, .commentUtilityWrap').forEach(el => el.remove());
+  root.querySelectorAll('[data-note-for], .commentTextarea, [data-guest-nickname-for], [data-guest-email-for], .commentTagBtn').forEach(el => {
+    if('disabled' in el) el.disabled = true;
+    if(el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') el.setAttribute('readonly', 'readonly');
+  });
+}
+function renderPublicEventFallback(badId){
+  const host = $("publicEventShell");
+  if(!host) return;
+  const upcoming = (state.events || [])
+    .filter(e => e?.parsed instanceof Date && !Number.isNaN(+e.parsed))
+    .filter(e => e.parsed >= new Date(Date.now() - 86400000))
+    .sort((a,b) => a.parsed - b.parsed)
+    .slice(0, 40);
+  host.innerHTML = `
+    <div class="publicEventHeader">
+      <div class="publicEventKicker"><span class="material-symbols-outlined">search</span><span>Public event finder</span></div>
+      <h2>Event not found</h2>
+      <div class="muted">We couldn’t find <strong>${escapeHtml(badId || "")}</strong>. Search one of the published events below.</div>
+    </div>
+    <div class="publicEventSearchWrap">
+      <input id="publicEventSearch" class="publicEventSearch" type="search" placeholder="Search by title, venue, band, or date" autocomplete="off" />
+      <div id="publicEventList" class="publicEventList">
+        ${upcoming.map(event => `
+          <article class="publicEventItem" data-public-event-item>
+            <div class="publicEventItem__body">
+              <div class="publicEventItem__title">${escapeHtml(event.title || event.event_name || event.event_id)}</div>
+              <div class="publicEventItem__meta">${escapeHtml(formatPublicEventDate(event.start_datetime || event.date))} · ${escapeHtml(eventBandLabel(event))} · ${escapeHtml(event.venue || "Venue TBC")}</div>
+            </div>
+            <a class="pillBtn publicEventItem__link" href="${publicEventLink(event.event_id)}"><span class="material-symbols-outlined">arrow_forward</span><span>Open</span></a>
+          </article>
+        `).join("")}
+      </div>
+    </div>`;
+  const input = $("publicEventSearch");
+  input?.addEventListener("input", () => {
+    const q = String(input.value || "").trim().toLowerCase();
+    host.querySelectorAll('[data-public-event-item]').forEach(item => {
+      const text = String(item.textContent || "").toLowerCase();
+      item.style.display = !q || text.includes(q) ? "" : "none";
+    });
+  });
+}
+function renderPublicEventPage(){
+  const host = $("publicEventShell");
+  if(!host) return;
+  const event = (state.events || []).find(e => String(e.event_id) === String(state.route.eventId || ""));
+  if(!event){
+    renderPublicEventFallback(state.route.eventId);
+    return;
+  }
+  host.innerHTML = `<div class="multiEventSlot" data-event-slot="${escapeHtml(event.event_id)}"></div>`;
+  renderEventCard(host.querySelector('[data-event-slot]'), "NEXT GIG", event, "Event not found.");
+  const details = host.querySelector('.cardDetails');
+  if(details) details.open = false;
+  applyPublicRestrictions(host);
+}
+function syncHomeRouteMode(active){
+  document.body.classList.toggle('publicEventMode', !!active);
+  const shell = $("publicEventShell");
+  if(shell) shell.classList.toggle('hidden', !active);
 }
 
 function renderApiDebugPanel(entries = getApiDebugLog()){
@@ -101,6 +191,27 @@ function nowHeaderText(){
   const time = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   return time;
 }
+function applyTextSize(size){
+  const allowed = new Set(["normal","large","xlarge"]);
+  const next = allowed.has(size) ? size : "normal";
+  document.documentElement.setAttribute("data-text-size", next);
+  document.querySelectorAll('[data-text-size]').forEach(btn => {
+    btn.classList.toggle('is-active', btn.dataset.textSize === next);
+    btn.setAttribute('aria-pressed', btn.dataset.textSize === next ? 'true' : 'false');
+  });
+  try{ localStorage.setItem("bbhub.textSize", next); }catch(_e){}
+}
+
+function initTextSizeControls(){
+  const saved = (() => {
+    try{ return localStorage.getItem("bbhub.textSize") || "normal"; }catch(_e){ return "normal"; }
+  })();
+  applyTextSize(saved);
+  document.querySelectorAll('[data-text-size]').forEach(btn => {
+    btn.addEventListener('click', () => applyTextSize(btn.dataset.textSize || 'normal'));
+  });
+}
+
 function getInitials(name){
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   return (parts[0]?.[0] || "B") + (parts[1]?.[0] || parts[0]?.[1] || "B");
@@ -191,8 +302,9 @@ function updateGreeting(){
   }else{
     pill.innerHTML = `<span class="userPill__text"><strong>Welcome guest</strong><span>Login to book into gigs</span></span>`;
   }
-  $("loginBtn").classList.toggle("hidden", !!state.session);
-  $("logoutBtn").classList.toggle("hidden", !state.session);
+  const publicMode = isPublicEventRoute();
+  $("loginBtn").classList.toggle("hidden", !!state.session || publicMode);
+  $("logoutBtn").classList.toggle("hidden", !state.session || publicMode);
 }
 
 function switchView(view){
@@ -1615,6 +1727,12 @@ function renderPlanner(){
 }
 
 function renderHome(){
+  if(isPublicEventRoute()){
+    syncHomeRouteMode(true);
+    renderPublicEventPage();
+    return;
+  }
+  syncHomeRouteMode(false);
   const visibleEvents = eventsVisibleToCurrentUser(state.events);
   const nextGigs = findNextByBand(visibleEvents, "gig");
   const nextRehs = findNextByBand(visibleEvents, "rehearsal");
@@ -1933,7 +2051,9 @@ function bindControls(){
   const homePlannerIgnore = $("homePlannerIgnoreRehearsalsToggle");
   const homeTimelineInclude = $("homeTimelineIncludeRehearsalsToggle");
   const plannerTimelineInclude = $("plannerTimelineIncludeRehearsalsToggle");
+  const aboutBtn = $("aboutBtn");
   if (menuBtn) menuBtn.addEventListener("click", openMenu);
+  if (aboutBtn) aboutBtn.addEventListener("click", () => { renderAboutContent(); $("aboutDialog")?.showModal(); closeMenu(); });
   if (scrim) scrim.addEventListener("click", closeMenu);
   if (backTopBtn) backTopBtn.addEventListener("click", () => window.scrollTo({top:0, behavior:"smooth"}));
   if (themeBtn) themeBtn.addEventListener("click", () => {
@@ -2102,6 +2222,7 @@ async function start(){
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  initTextSizeControls();
   setupApiDebugPanel();
   bindControls();
   bindLoginUi();

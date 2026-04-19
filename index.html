@@ -30,6 +30,7 @@
       <button class="navBtn" data-view="library"><span class="material-symbols-outlined">library_music</span><span>Band Library</span></button>
       <button class="navBtn" data-view="planner"><span class="material-symbols-outlined">event_note</span><span>Planner</span></button>
       <button class="navBtn" data-view="debug"><span class="material-symbols-outlined">bug_report</span><span>Debug</span></button>
+      <button class="navBtn" id="aboutBtn" type="button"><span class="material-symbols-outlined">info</span><span>About</span></button>
     </nav>
   </aside>
 
@@ -49,6 +50,11 @@
     </div>
 
     <div class="topbar__right">
+      <div class="textSizeControls" aria-label="Text size controls">
+        <button class="textSizeBtn" id="textSizeNormalBtn" type="button" data-text-size="normal" title="Normal text size">A</button>
+        <button class="textSizeBtn" id="textSizeLargeBtn" type="button" data-text-size="large" title="Larger text size">A+</button>
+        <button class="textSizeBtn" id="textSizeXLargeBtn" type="button" data-text-size="xlarge" title="Largest text size">A++</button>
+      </div>
       <div id="greetingPill" class="userPill">Welcome Guest</div>
       <button class="iconBtn authIconBtn" id="loginBtn" title="Login"><span class="material-symbols-outlined">person</span></button>
       <button class="iconBtn authIconBtn hidden" id="logoutBtn" title="Logout"><span class="material-symbols-outlined">logout</span></button>
@@ -57,6 +63,7 @@
 
   <main>
     <section id="view-home" class="view active">
+      <section id="publicEventShell" class="card publicEventShell hidden"></section>
       <section class="hero card" id="heroSection">
         <div class="hero__media">
           <img src="images/hubphoto.jpg" alt="Bondi Brass band" />
@@ -244,6 +251,21 @@
       <div class="loginActions">
         <button type="button" class="primaryBtn" id="findLoginBtn">RSVP</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="aboutDialog" class="loginDialog aboutDialog">
+    <form method="dialog" class="loginPanel aboutPanel">
+      <div class="loginHead">
+        <div>
+          <div class="label">About</div>
+          <h3>BBHub</h3>
+        </div>
+        <button class="iconBtn" value="cancel" title="Close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div id="aboutContent" class="aboutContent"></div>
     </form>
   </dialog>
 
