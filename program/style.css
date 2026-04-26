@@ -1054,3 +1054,55 @@ body.dark .final-cumulative {
   border-radius:10px;
   background:#eee;
 }
+
+
+:root { --font-scale: 1; }
+body { font-size: calc(14px * var(--font-scale)); }
+.text-size-controls { display:flex; gap:4px; }
+
+
+:root {
+  --font-scale: 1;
+  --space-scale: calc(1 * var(--font-scale));
+  --tap-scale: calc(1 * var(--font-scale));
+}
+
+body {
+  font-size: calc(14px * var(--font-scale));
+  line-height: calc(1.4 * var(--space-scale));
+}
+
+/* Buttons / tap targets */
+button, .btn, .pillBtn {
+  padding: calc(6px * var(--tap-scale)) calc(10px * var(--tap-scale));
+  font-size: calc(0.95em * var(--font-scale));
+}
+
+/* Swimlane list */
+.swimlane-list, .bbhub-chair-list {
+  font-size: 1em;
+  line-height: calc(1.5 * var(--space-scale));
+}
+
+.swimlane-row, .bbhub-chair-row {
+  padding: calc(3px * var(--space-scale)) 0;
+  font-size: 1em;
+}
+
+/* Improve wrapping for long lines */
+.swimlane-row, .bbhub-chair-row, .event-meta, .event-title {
+  word-break: break-word;
+}
+
+/* Header controls spacing */
+.text-size-controls {
+  display: flex;
+  gap: calc(4px * var(--space-scale));
+  align-items: center;
+}
+
+.text-size-controls button {
+  min-width: calc(36px * var(--tap-scale));
+  min-height: calc(28px * var(--tap-scale));
+  border-radius: 6px;
+}

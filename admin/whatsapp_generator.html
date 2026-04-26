@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BBHub WhatsApp Generator</title>
+<style>
+  body { font-family: Arial; margin:20px; background:#f4f6f8;}
+  h2 { margin-bottom:10px; }
+  .box { background:#fff; padding:15px; border-radius:10px; margin-bottom:15px; }
+  label { display:block; margin-top:10px; font-weight:bold;}
+  input { width:100%; padding:6px; margin-top:4px;}
+  button { margin-top:15px; padding:10px 15px; border:none; background:#007bff; color:#fff; border-radius:6px; cursor:pointer;}
+  textarea { width:100%; height:220px; margin-top:10px; font-family:monospace; }
+</style>
+</head>
+
+<body>
+
+<h2>🎺 BBHub → WhatsApp Message Generator</h2>
+
+<div class="box">
+
+  <label>Event Name</label>
+  <input id="eventName" value="Coogee Beach Dawn Service">
+
+  <label>Event Date</label>
+  <input id="eventDate" value="Sat 25 Apr">
+
+  <label>Event Link</label>
+  <input id="eventLink" value="https://bbhub.app?event_id=e2026-04-25-coogee">
+
+  <label>Yes</label>
+  <input id="yes" value="18">
+
+  <label>Maybe</label>
+  <input id="maybe" value="4">
+
+  <label>No</label>
+  <input id="no" value="6">
+
+  <label>No Response</label>
+  <input id="missing" value="9">
+
+  <label>Needed (comma separated)</label>
+  <input id="needed" value="2 Cornets, 1 Trombone">
+
+  <button onclick="generate()">Generate Message</button>
+
+</div>
+
+<div class="box">
+  <label>WhatsApp Message</label>
+  <textarea id="output"></textarea>
+</div>
+
+<script>
+function generate() {
+  const eventName = document.getElementById("eventName").value;
+  const eventDate = document.getElementById("eventDate").value;
+  const link = document.getElementById("eventLink").value;
+  const yes = document.getElementById("yes").value;
+  const maybe = document.getElementById("maybe").value;
+  const no = document.getElementById("no").value;
+  const missing = document.getElementById("missing").value;
+  const needed = document.getElementById("needed").value.split(",");
+
+  let neededText = "";
+  needed.forEach(n => {
+    if(n.trim() !== "") {
+      neededText += "⚠️ " + n.trim() + "\n";
+    }
+  });
+
+  const msg =
+`🎺 ${eventName}
+📅 ${eventDate}
+
+Current RSVP:
+✅ Yes: ${yes}
+🤔 Maybe: ${maybe}
+❌ No: ${no}
+⏳ No response: ${missing}
+
+Still needed:
+${neededText}
+
+Please respond here 👇
+${link}`;
+
+  document.getElementById("output").value = msg;
+}
+</script>
+
+</body>
+</html>

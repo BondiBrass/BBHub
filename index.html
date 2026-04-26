@@ -29,6 +29,7 @@
       <button class="navBtn" data-view="stage"><span class="material-symbols-outlined">stadia_controller</span><span>Stage Layout</span></button>
       <button class="navBtn" data-view="library"><span class="material-symbols-outlined">library_music</span><span>Band Library</span></button>
       <button class="navBtn" data-view="planner"><span class="material-symbols-outlined">event_note</span><span>Planner</span></button>
+      <button class="navBtn" data-view="dashboard"><span class="material-symbols-outlined">campaign</span><span>WhatsApp Dashboard</span></button>
       <button class="navBtn" data-view="debug"><span class="material-symbols-outlined">bug_report</span><span>Debug</span></button>
       <button class="navBtn" id="aboutBtn" type="button"><span class="material-symbols-outlined">info</span><span>About</span></button>
     </nav>
@@ -51,15 +52,24 @@
 
     <div class="topbar__right">
       <div class="textSizeControls" aria-label="Text size controls">
-        <button class="textSizeBtn" id="textSizeNormalBtn" type="button" data-text-size="normal" title="Normal text size">A</button>
-        <button class="textSizeBtn" id="textSizeLargeBtn" type="button" data-text-size="large" title="Larger text size">A+</button>
-        <button class="textSizeBtn" id="textSizeXLargeBtn" type="button" data-text-size="xlarge" title="Largest text size">A++</button>
-      </div>
+  <button class="textSizeBtn textSizeBtn--step" id="textSizeDownBtn" type="button" aria-label="Decrease text size" title="Smaller text">A-</button>
+  <button class="textSizeBtn textSizeBtn--step" id="textSizeUpBtn" type="button" aria-label="Increase text size" title="Larger text">A+</button>
+  <button class="textSizeBtn textSizeBtn--reset" id="textSizeResetBtn" type="button" aria-label="Reset text size" title="Reset text size">Reset</button>
+  <span class="textSizeLabel" id="textSizeLabel" aria-live="polite">100%</span>
+</div>
       <div id="greetingPill" class="userPill">Welcome Guest</div>
       <button class="iconBtn authIconBtn" id="loginBtn" title="Login"><span class="material-symbols-outlined">person</span></button>
       <button class="iconBtn authIconBtn hidden" id="logoutBtn" title="Logout"><span class="material-symbols-outlined">logout</span></button>
     </div>
-  </header>
+  
+<div class="text-size-controls">
+  <button id="fontMinus">A-</button>
+  <button id="fontPlus">A+</button>
+  <button id="fontReset">Reset</button>
+  <span id="fontLabel">100%</span>
+</div>
+
+</header>
 
   <main>
     <section id="view-home" class="view active">
@@ -210,6 +220,41 @@
         <div id="plannerTimelineList" class="timelineList empty">Loading…</div>
         <div class="timelineDivider"><span>Expanded cards</span></div>
         <div id="plannerList" class="empty">Loading…</div>
+      </section>
+    </section>
+
+    <section id="view-dashboard" class="view">
+      <section class="card nudgeHeroCard">
+        <div class="nudgeHero">
+          <div>
+            <div class="label">Committee explanation</div>
+            <h2>WhatsApp nudges, BBHub remains the truth</h2>
+            <p class="muted">Use WhatsApp to get attention. Use BBHub to collect RSVP data, chair assignments, comments and the live picture of the band.</p>
+          </div>
+          <div class="nudgeHero__badge"><span class="material-symbols-outlined">verified</span><span>Method A: free + controlled</span></div>
+        </div>
+        <div class="nudgeFlowDiagram" aria-label="BBHub WhatsApp nudge workflow">
+          <div class="flowNode flowNode--truth"><span class="material-symbols-outlined">database</span><strong>BBHub / Google Sheet</strong><small>RSVPs, assignments, chair plan</small></div>
+          <div class="flowArrow">-&gt;</div>
+          <div class="flowNode"><span class="material-symbols-outlined">dashboard</span><strong>Nudge Dashboard</strong><small>Counts + vacant chairs</small></div>
+          <div class="flowArrow">-&gt;</div>
+          <div class="flowNode flowNode--whatsapp"><span class="material-symbols-outlined">forum</span><strong>WhatsApp</strong><small>Message copied and sent</small></div>
+          <div class="flowArrow">-&gt;</div>
+          <div class="flowNode"><span class="material-symbols-outlined">how_to_reg</span><strong>Members respond</strong><small>Link returns to BBHub</small></div>
+        </div>
+        <div class="nudgeCommitteeNote"><strong>Important:</strong> WhatsApp is not the database. It is only the megaphone. The live truth stays in BBHub.</div>
+      </section>
+
+      <section class="card">
+        <div class="sectionHead sectionHead--stack-mobile">
+          <div>
+            <div class="label">WhatsApp Nudge Dashboard</div>
+            <h2>Generate committee-safe messages from live chairs</h2>
+            <div class="muted">Each message includes RSVP counts and chair codes with full labels, e.g. SC1 (Solo Cornet 1).</div>
+          </div>
+          <label class="field nudgeToneField"><span>Tone</span><select id="nudgeToneSelect"><option value="friendly">Friendly</option><option value="reminder" selected>Reminder</option><option value="urgent">Urgent</option></select></label>
+        </div>
+        <div id="nudgeDashboardList" class="nudgeDashboardList empty">Loading...</div>
       </section>
     </section>
 

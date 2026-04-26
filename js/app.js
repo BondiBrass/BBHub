@@ -15,7 +15,8 @@ const state = {
   debugTimings: {},
   route: {
     eventId: routeParams.get("event") || "",
-    view: routeParams.get("view") || (routeParams.get("event") ? "public" : "normal")
+    mode: routeParams.get("mode") || "",
+    view: routeParams.get("view") || (routeParams.get("mode") === "dashboard" ? "dashboard" : (routeParams.get("event") ? "public" : "normal"))
   }
 };
 
@@ -191,25 +192,47 @@ function nowHeaderText(){
   const time = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
   return time;
 }
+const TEXT_SIZE_STEPS = ["small", "normal", "large", "xlarge", "xxlarge"];
+const TEXT_SIZE_LABELS = {
+  small: "90%",
+  normal: "100%",
+  large: "112%",
+  xlarge: "125%",
+  xxlarge: "138%"
+};
+
 function applyTextSize(size){
-  const allowed = new Set(["normal","large","xlarge"]);
-  const next = allowed.has(size) ? size : "normal";
+  const next = TEXT_SIZE_STEPS.includes(size) ? size : "normal";
   document.documentElement.setAttribute("data-text-size", next);
-  document.querySelectorAll('[data-text-size]').forEach(btn => {
-    btn.classList.toggle('is-active', btn.dataset.textSize === next);
-    btn.setAttribute('aria-pressed', btn.dataset.textSize === next ? 'true' : 'false');
-  });
+
+  const label = document.getElementById("textSizeLabel");
+  if(label) label.textContent = TEXT_SIZE_LABELS[next] || "100%";
+
+  const downBtn = document.getElementById("textSizeDownBtn");
+  const upBtn = document.getElementById("textSizeUpBtn");
+  if(downBtn) downBtn.disabled = next === TEXT_SIZE_STEPS[0];
+  if(upBtn) upBtn.disabled = next === TEXT_SIZE_STEPS[TEXT_SIZE_STEPS.length - 1];
+
   try{ localStorage.setItem("bbhub.textSize", next); }catch(_e){}
+}
+
+function stepTextSize(delta){
+  const current = document.documentElement.getAttribute("data-text-size") || "normal";
+  const idx = Math.max(0, TEXT_SIZE_STEPS.indexOf(current));
+  const nextIdx = Math.max(0, Math.min(TEXT_SIZE_STEPS.length - 1, idx + delta));
+  applyTextSize(TEXT_SIZE_STEPS[nextIdx]);
 }
 
 function initTextSizeControls(){
   const saved = (() => {
     try{ return localStorage.getItem("bbhub.textSize") || "normal"; }catch(_e){ return "normal"; }
   })();
+
   applyTextSize(saved);
-  document.querySelectorAll('[data-text-size]').forEach(btn => {
-    btn.addEventListener('click', () => applyTextSize(btn.dataset.textSize || 'normal'));
-  });
+
+  document.getElementById("textSizeDownBtn")?.addEventListener("click", () => stepTextSize(-1));
+  document.getElementById("textSizeUpBtn")?.addEventListener("click", () => stepTextSize(1));
+  document.getElementById("textSizeResetBtn")?.addEventListener("click", () => applyTextSize("normal"));
 }
 
 function getInitials(name){
@@ -316,6 +339,7 @@ function switchView(view){
   if(view === "stage") renderStage();
   if(view === "library") renderLibrary();
   if(view === "planner") renderMatrixHome();
+  if(view === "dashboard") renderNudgeDashboard();
   renderPlanner();
   hideLoading();
   if(view === "debug" && DEBUG) renderDebugPanel(state);
@@ -1726,6 +1750,143 @@ function renderPlanner(){
   renderIntoHost("homePlannerList", "No events found.");
 }
 
+function nudgeEventLink(eventId){
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('event', String(eventId || ''));
+  return url.toString();
+}
+function nudgeChairLabel(ch){
+  const code = String(ch?.display_short || ch?.chair_code || '').trim();
+  const label = String(ch?.chair_label || ch?.instrument || ch?.section || '').trim();
+  return label && label.toLowerCase() !== code.toLowerCase() ? `${code} (${label})` : code;
+}
+function nudgeAssignmentStats(event){
+  const chairs = chairsForEvent(event).filter(ch => !ch.is_optional);
+  const assignments = assignmentsForEvent(event);
+  const byChair = chairAssignmentsByCode(assignments);
+  const needs = [];
+  let covered = 0;
+  chairs.forEach(ch => {
+    const members = membersForChair(byChair, ch.chair_code);
+    if(members.length > 0) covered += 1;
+    else needs.push({ chair: ch, reason: 'vacant' });
+  });
+  const assignedMemberIds = new Set(assignments
+    .map(a => String(a.member_id || a.member_id_check || a.display_name || a.display_name_check || '').trim())
+    .filter(Boolean));
+  return { chairs, assignments, needs, covered, vacant: needs.length, total: chairs.length, assignedPlayers: assignedMemberIds.size, extraAssignments: Math.max(0, assignments.length - covered) };
+}
+function nudgeEventStats(event){ return nudgeAssignmentStats(event); }
+function nudgeDateLine(event){
+  const d = event?.parsed instanceof Date ? event.parsed : new Date(event?.start_datetime || event?.date || 0);
+  if(Number.isNaN(+d)) return 'Date TBC';
+  const date = d.toLocaleDateString('en-AU', { weekday:'short', day:'2-digit', month:'short' });
+  const time = timelineTimeLabel(event);
+  return time ? `${date} · ${time}` : date;
+}
+function buildNudgeMessage(event, tone = 'reminder'){
+  const stats = nudgeAssignmentStats(event);
+  const needLines = stats.needs.length ? stats.needs.map(item => `⚠️ ${nudgeChairLabel(item.chair)}`).join('\n') : '✅ No vacant core chairs showing in BBHub right now.';
+  const title = event?.title || event?.event_name || event?.event_id || 'Band event';
+  const prefix = tone === 'urgent' ? '🚨 Chair coverage check' : tone === 'friendly' ? '🎺 Friendly BBHub reminder' : '🎺 BBHub chair coverage reminder';
+  const action = tone === 'urgent' ? 'Please jump into BBHub ASAP so we can lock the band plan 👇' : tone === 'friendly' ? 'When you get a moment, please check the band plan and update your response here 👇' : 'Please check the band plan and update your response here 👇';
+  return `${prefix}\n\n${title}\n📅 ${nudgeDateLine(event)}\n\nBand plan from Assignments:\n🎼 Chairs filled: ${stats.covered}/${stats.total}\n👥 Players assigned: ${stats.assignedPlayers}\n⚠️ Vacant chairs: ${stats.vacant}\n\nChairs needing coverage:\n${needLines}\n\n${action}\n${nudgeEventLink(event.event_id)}`;
+}
+function nudgePlanFilename(event){
+  const raw = String(event?.event_id || event?.event_name || 'band-plan').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  return `${raw || 'band-plan'}-chair-plan.png`;
+}
+function nudgePlanMarkup(event){ return renderShowcasePlanMarkup(chairsForEvent(event), assignmentsForEvent(event), event?.event_id || ''); }
+async function exportNudgePlanImage(eventId){
+  const event = (state.events || []).find(e => String(e.event_id) === String(eventId));
+  if(!event) return;
+  const holder = document.createElement('div');
+  holder.style.position = 'fixed'; holder.style.left = '-10000px'; holder.style.top = '0'; holder.style.width = '1100px'; holder.style.background = '#ffffff';
+  holder.innerHTML = nudgePlanMarkup(event);
+  document.body.appendChild(holder);
+  const svg = holder.querySelector('svg');
+  if(!svg){ holder.remove(); alert('No chair plan SVG found for this event.'); return; }
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  const viewBox = clone.getAttribute('viewBox') || '0 0 1000 700';
+  const parts = viewBox.split(/\s+/).map(Number);
+  const w = Math.max(800, Math.round(parts[2] || 1000));
+  const h = Math.max(500, Math.round(parts[3] || 700));
+  clone.setAttribute('width', String(w)); clone.setAttribute('height', String(h));
+  const style = document.createElement('style');
+  style.textContent = '.eventShowcase__planCode{font:bold 18px Arial,sans-serif;fill:#111827}.eventShowcase__planName,.eventShowcase__planVacant{font:bold 11px Arial,sans-serif;fill:#111827}.eventShowcase__planMore{font:bold 10px Arial,sans-serif;fill:#475569}.eventShowcase__planLabel{font:10px Arial,sans-serif;fill:#475569}';
+  clone.insertBefore(style, clone.firstChild);
+  const svgText = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas'); canvas.width = w * 2; canvas.height = h * 2;
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url); holder.remove();
+    canvas.toBlob(outBlob => {
+      if(!outBlob) return alert('Could not create chair plan image.');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(outBlob); a.download = nudgePlanFilename(event); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    }, 'image/png');
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); holder.remove(); alert('Could not render the chair plan image.'); };
+  img.src = url;
+}
+function renderNudgeDashboard(){
+  const host = $('nudgeDashboardList');
+  if(!host) return;
+  const allItems = eventsVisibleToCurrentUser(getFilteredUpcomingEvents()).filter(e => e.type !== 'rehearsal');
+  const routeEventId = String(state.route.eventId || '');
+  const items = routeEventId ? allItems.filter(e => String(e.event_id) === routeEventId) : allItems.slice(0, 30);
+  if(!items.length){ host.innerHTML = '<div class="empty">No upcoming gigs found.</div>'; return; }
+  host.classList.remove('empty');
+  host.innerHTML = items.map(event => {
+    const stats = nudgeAssignmentStats(event);
+    const msg = buildNudgeMessage(event, $('nudgeToneSelect')?.value || 'reminder');
+    const needsHtml = stats.needs.length
+      ? stats.needs.slice(0, 8).map(item => `<span class="nudgeChairNeed">${escapeHtml(nudgeChairLabel(item.chair))}</span>`).join('') + (stats.needs.length > 8 ? `<span class="nudgeChairNeed nudgeChairNeed--more">+${stats.needs.length - 8} more</span>` : '')
+      : '<span class="nudgeAllGood">All core chairs covered</span>';
+    return `<article class="nudgeCard" data-nudge-event="${escapeHtml(event.event_id)}">
+      <div class="nudgeCard__main">
+        <div class="nudgeCard__top"><span class="nudgeBandPill">${escapeHtml(eventBandLabel(event))}</span><span class="nudgeDate">${escapeHtml(nudgeDateLine(event))}</span></div>
+        <h3>${escapeHtml(event.title || event.event_name || event.event_id)}</h3>
+        <div class="nudgeStats"><span>🎼 ${stats.covered}/${stats.total} chairs filled</span><span>👥 ${stats.assignedPlayers} players assigned</span><span>⚠️ ${stats.vacant} vacant</span></div>
+        <div class="nudgeNeeds">${needsHtml}</div>
+      </div>
+      <div class="nudgeActions">
+        <button class="pillBtn" type="button" data-nudge-toggle="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">expand_more</span><span>Preview</span></button>
+        <button class="pillBtn" type="button" data-nudge-plan="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">image</span><span>Plan PNG</span></button>
+        <button class="primaryBtn" type="button" data-nudge-go="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">send</span><span>GO</span></button>
+      </div>
+      <details class="nudgePreviewAccordion" data-nudge-details="${escapeHtml(event.event_id)}">
+        <summary>Review / copy WhatsApp text manually</summary>
+        <div class="nudgePreviewGrid">
+          <textarea class="nudgePreviewText" readonly>${escapeHtml(msg)}</textarea>
+          <div class="nudgePlanPreview">
+            <div class="nudgePlanPreview__title">Band plan image source</div>
+            ${nudgePlanMarkup(event)}
+          </div>
+        </div>
+        <div class="nudgePreviewActions">
+          <button class="pillBtn" type="button" data-nudge-copy="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">content_copy</span><span>Copy text</span></button>
+          <button class="pillBtn" type="button" data-nudge-plan="${escapeHtml(event.event_id)}"><span class="material-symbols-outlined">download</span><span>Download plan PNG</span></button>
+          <span class="muted">WhatsApp Web cannot reliably auto-attach an image to a group. Download the PNG, then attach it manually if wanted.</span>
+        </div>
+      </details>
+    </article>`;
+  }).join('');
+}
+async function copyNudgeMessage(eventId, openWhatsApp = false, showAlert = true){
+  const event = (state.events || []).find(e => String(e.event_id) === String(eventId));
+  if(!event) return;
+  const tone = $('nudgeToneSelect')?.value || 'reminder';
+  const msg = buildNudgeMessage(event, tone);
+  try{ await navigator.clipboard.writeText(msg); }catch(_e){}
+  if(openWhatsApp) window.open('https://web.whatsapp.com/', '_blank', 'noopener');
+  if(showAlert) alert(openWhatsApp ? 'Message copied. WhatsApp Web is opening — paste into the band group and send. Attach the plan PNG manually if you want the picture included.' : 'Message copied to clipboard.');
+}
 function renderHome(){
   if(isPublicEventRoute()){
     syncHomeRouteMode(true);
@@ -2198,6 +2359,7 @@ async function start(){
     updateSummary();
     const tRender0 = performance.now();
     renderHome();
+    if(state.route.view === "dashboard") switchView("dashboard");
     timings.renderHomeMs = Math.round(performance.now() - tRender0);
     timings.totalMs = Math.round(performance.now() - t0);
     state.debugTimings = timings;
@@ -2227,6 +2389,20 @@ window.addEventListener("DOMContentLoaded", () => {
   bindControls();
   bindLoginUi();
   bindHomeDelegates();
+  document.addEventListener("click", (ev) => {
+    const toggle = ev.target.closest("[data-nudge-toggle]");
+    const copy = ev.target.closest("[data-nudge-copy]");
+    const plan = ev.target.closest("[data-nudge-plan]");
+    const go = ev.target.closest("[data-nudge-go]");
+    if(toggle){
+      const details = document.querySelector(`[data-nudge-details="${CSS.escape(toggle.dataset.nudgeToggle)}"]`);
+      if(details) details.open = !details.open;
+    }
+    if(copy) copyNudgeMessage(copy.dataset.nudgeCopy, false, true);
+    if(plan) exportNudgePlanImage(plan.dataset.nudgePlan);
+    if(go) copyNudgeMessage(go.dataset.nudgeGo, true, true);
+  });
+  $("nudgeToneSelect")?.addEventListener("change", renderNudgeDashboard);
   start();
 });
 
@@ -2406,3 +2582,5 @@ function renderEventCommentsPreview(eventId, comments){
     </div>
   `;
 }
+
+
