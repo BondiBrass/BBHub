@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BBHub Desktop</title>
+  <title>BBHub v6</title>
   <meta name="description" content="BBHub – Bondi Brass gigs, rehearsals, RSVP, activity, strength and stage layout." />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,500,0,0" />
   <link rel="stylesheet" href="css/style.css" />
@@ -30,6 +30,7 @@
       <button class="navBtn" data-view="library"><span class="material-symbols-outlined">library_music</span><span>Band Library</span></button>
       <button class="navBtn" data-view="planner"><span class="material-symbols-outlined">event_note</span><span>Planner</span></button>
       <button class="navBtn" data-view="dashboard"><span class="material-symbols-outlined">campaign</span><span>WhatsApp Dashboard</span></button>
+      <button class="navBtn" data-view="availability"><span class="material-symbols-outlined">how_to_reg</span><span>My Availability</span></button>
       <button class="navBtn" data-view="debug"><span class="material-symbols-outlined">bug_report</span><span>Debug</span></button>
       <button class="navBtn" id="aboutBtn" type="button"><span class="material-symbols-outlined">info</span><span>About</span></button>
     </nav>
@@ -44,7 +45,7 @@
       </button>
       <img class="brandLogo" src="images/wbbb_logo_350px.png" alt="Bondi Brass logo" />
       <div class="brandBlock">
-        <h1>BBHub V38</h1>
+        <h1>BBHub</h1>
         <div id="summaryLine" class="sub">loading...</div>
         <div id="statusLine" class="sub">Not loaded</div>
       </div>
@@ -62,12 +63,7 @@
       <button class="iconBtn authIconBtn hidden" id="logoutBtn" title="Logout"><span class="material-symbols-outlined">logout</span></button>
     </div>
   
-<div class="text-size-controls">
-  <button id="fontMinus">A-</button>
-  <button id="fontPlus">A+</button>
-  <button id="fontReset">Reset</button>
-  <span id="fontLabel">100%</span>
-</div>
+
 
 </header>
 
@@ -255,6 +251,12 @@
           <label class="field nudgeToneField"><span>Tone</span><select id="nudgeToneSelect"><option value="friendly">Friendly</option><option value="reminder" selected>Reminder</option><option value="urgent">Urgent</option></select></label>
         </div>
         <div id="nudgeDashboardList" class="nudgeDashboardList empty">Loading...</div>
+      </section>
+    </section>
+
+    <section id="view-availability" class="view">
+      <section class="card availabilityShell">
+        <div id="availabilityApp" class="availabilityApp empty">Loading availability…</div>
       </section>
     </section>
 

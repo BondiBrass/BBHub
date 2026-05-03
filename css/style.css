@@ -2363,3 +2363,233 @@ html[data-text-size="xlarge"] .compactBand__sep{
 .nudgePlanPreview .eventShowcase__planSvg{width:100%;height:auto;max-height:420px;display:block}
 .nudgePreviewActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
 @media (max-width:900px){.nudgePreviewGrid{grid-template-columns:1fr}.nudgePreviewText{min-height:230px}}
+
+
+/* BBHub v41 mobile availability RSVP */
+.availabilityShell{max-width:760px;margin:0 auto}.availabilityApp{display:grid;gap:14px}.availabilityHeader{display:grid;gap:6px}.availabilityHeader h2{margin:.1rem 0;font-size:clamp(1.7rem,7vw,2.4rem);line-height:1.05}.availabilitySummary{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.availabilitySummary span{border:1px solid rgba(15,23,42,.08);background:#f8fafc;border-radius:999px;padding:6px 10px;font-size:.84rem;font-weight:850;color:#334155}.availabilityList{display:grid;gap:12px}.availabilityCard{border:1px solid rgba(15,23,42,.08);border-radius:24px;background:linear-gradient(180deg,#fff,#f8fafc);box-shadow:0 16px 36px rgba(15,23,42,.08);padding:14px;display:grid;gap:12px}.availabilityCard__top{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}.availabilityCard h3{margin:.05rem 0 .45rem;font-size:1.18rem;line-height:1.18}.availabilityMeta{display:flex;align-items:center;gap:7px;color:#475569;font-size:.92rem;line-height:1.3;margin-top:4px}.availabilityMeta .material-symbols-outlined{font-size:18px;color:#64748b}.availabilityBadge{min-width:112px;text-align:center;border-radius:18px;padding:10px 8px;background:#f1f5f9;color:#334155;display:grid;gap:2px;align-content:center}.availabilityBadge span{font-size:1.45rem}.availabilityBadge strong{font-size:.88rem;line-height:1.1}.availabilityBadge small{font-size:.72rem;color:inherit;opacity:.78}.availabilityBadge--y{background:#dcfce7;color:#166534}.availabilityBadge--m{background:#fef3c7;color:#92400e}.availabilityBadge--n{background:#fee2e2;color:#991b1b}.availabilityActions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.availabilityBtn{min-height:68px;border:1px solid rgba(15,23,42,.1);border-radius:18px;background:#fff;box-shadow:0 8px 18px rgba(15,23,42,.06);display:grid;place-items:center;gap:2px;font:inherit;font-weight:900;color:#0f172a;cursor:pointer}.availabilityBtn span{font-size:1.45rem}.availabilityBtn strong{font-size:.86rem}.availabilityBtn.is-selected{outline:3px solid rgba(37,99,235,.22);border-color:#2563eb;background:#eff6ff}.availabilityBtn:disabled{opacity:.55;cursor:not-allowed}.availabilityFooter{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(15,23,42,.07);padding-top:10px}.availabilityMsg{font-size:.82rem;color:#64748b}.availabilityFooter a{font-weight:900;color:#2563eb;text-decoration:none;white-space:nowrap}
+@media (max-width:640px){.availabilityShell{margin:0 -6px}.availabilityCard{border-radius:20px;padding:12px}.availabilityCard__top{grid-template-columns:1fr}.availabilityBadge{grid-template-columns:auto 1fr auto;text-align:left;align-items:center;min-width:0}.availabilityActions{gap:6px}.availabilityBtn{min-height:64px;border-radius:16px}.availabilityBtn strong{font-size:.78rem}.availabilityFooter{align-items:flex-start;flex-direction:column}.availabilityFooter a{font-size:.95rem}}
+
+/* BBHub v43 availability location action links */
+.availabilityMeta--location{align-items:center;flex-wrap:wrap}
+.availabilityLocationText{font-weight:800;color:#334155;min-width:0;overflow-wrap:anywhere}
+.availabilityLocationText--link{color:#2563eb;text-decoration:none}
+.availabilityLocationText--link:hover{text-decoration:underline}
+.availabilityLinkRow{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap;margin-left:4px}
+.availabilityLinkRow a{font-weight:900;color:#2563eb;text-decoration:none;background:#eff6ff;border:1px solid rgba(37,99,235,.15);border-radius:999px;padding:3px 8px;line-height:1.2}
+.availabilityLinkRow a:hover{text-decoration:underline}
+.dotSep{color:#94a3b8;font-weight:900}
+@media (max-width:640px){.availabilityMeta--location{display:flex;gap:7px}.availabilityLinkRow{margin-left:0}.availabilityLinkRow a{padding:3px 7px}}
+
+
+/* v46 availability polish */
+.debugMemberId{font-size:.58em;font-weight:800;color:#64748b;vertical-align:baseline}
+.availabilityBadge--none{background:#e0f2fe;color:#075985;border:1px dashed rgba(2,132,199,.35)}
+.summaryNoResponse{background:#e0f2fe!important;color:#075985!important;border-color:rgba(2,132,199,.18)!important}
+
+/* v47 availability compact RSVP summary in chair row */
+.availabilityMeta--chair{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.availabilityChairText{font-weight:750;color:#334155;min-width:0;overflow-wrap:anywhere}
+.availabilityMiniSummary{margin-left:auto;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:.86rem;font-weight:950;letter-spacing:.01em;background:#f8fafc;border:1px solid rgba(15,23,42,.08);border-radius:999px;padding:3px 8px;line-height:1.15}
+.availabilityMiniSummary__item{display:inline-flex;align-items:center;gap:1px;font-variant-numeric:tabular-nums}
+.availabilityMiniSummary__item--yes{color:#166534}
+.availabilityMiniSummary__item--maybe{color:#92400e}
+.availabilityMiniSummary__item--no{color:#991b1b}
+.availabilityMiniSummary__item--none{color:#075985}
+@media (max-width:640px){.availabilityMeta--chair{align-items:flex-start}.availabilityMiniSummary{margin-left:25px;margin-top:2px;font-size:.82rem;gap:6px;padding:3px 7px}}
+
+/* v48 availability mobile card polish */
+.availabilityList{
+  gap:14px;
+}
+.availabilityCard{
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(15,23,42,.14);
+  background:linear-gradient(180deg,#ffffff 0%,#fbfdff 100%);
+  box-shadow:0 12px 28px rgba(15,23,42,.09);
+}
+.availabilityCard::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:5px;
+  background:#cbd5e1;
+}
+.availabilityCard--y::before{background:#22c55e}
+.availabilityCard--m::before{background:#f59e0b}
+.availabilityCard--n::before{background:#ef4444}
+.availabilityCard--none::before{background:#38bdf8}
+.availabilityCard--next{
+  border-color:rgba(37,99,235,.55);
+  box-shadow:0 18px 42px rgba(37,99,235,.16);
+}
+.availabilityCard--next::after{
+  content:"NEXT";
+  position:absolute;
+  top:10px;
+  right:10px;
+  font-size:.66rem;
+  font-weight:950;
+  letter-spacing:.08em;
+  color:#1d4ed8;
+  background:#dbeafe;
+  border:1px solid rgba(37,99,235,.18);
+  border-radius:999px;
+  padding:4px 7px;
+}
+.availabilityCard h3{
+  display:flex;
+  align-items:baseline;
+  gap:7px;
+  padding-right:48px;
+  font-size:1.16rem;
+  letter-spacing:-.015em;
+}
+.availabilityCardIndex{
+  color:#64748b;
+  font-weight:950;
+  min-width:1.4em;
+}
+.availabilityMeta--chair{
+  background:#f8fafc;
+  border:1px solid rgba(15,23,42,.07);
+  border-radius:14px;
+  padding:7px 9px;
+  margin-top:8px;
+}
+.availabilityBadge{
+  border:1px solid rgba(15,23,42,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55);
+}
+.availabilityActions{
+  background:#f8fafc;
+  border:1px solid rgba(15,23,42,.06);
+  border-radius:22px;
+  padding:7px;
+}
+.availabilityBtn{
+  border-radius:16px;
+  box-shadow:0 6px 14px rgba(15,23,42,.06);
+}
+.availabilityFooter{
+  margin-left:5px;
+}
+@media (max-width:640px){
+  .availabilityApp{gap:13px}
+  .availabilityHeader h2{font-size:clamp(1.85rem,9vw,2.45rem)}
+  .availabilityCard{
+    border-radius:22px;
+    padding:13px 12px 12px 16px;
+    margin:0 2px;
+  }
+  .availabilityCard h3{
+    font-size:1.13rem;
+    line-height:1.16;
+    margin-bottom:8px;
+  }
+  .availabilityCard--next::after{
+    top:9px;
+    right:9px;
+  }
+  .availabilityMeta{
+    font-size:.91rem;
+  }
+  .availabilityMeta--chair{
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    align-items:center;
+    gap:7px;
+  }
+  .availabilityMeta--chair .availabilityMiniSummary{
+    margin:0;
+    justify-self:end;
+  }
+  .availabilityActions{
+    border-radius:20px;
+    gap:6px;
+  }
+  .availabilityBtn{
+    min-height:66px;
+  }
+}
+@media (max-width:390px){
+  .availabilityMeta--chair{
+    grid-template-columns:auto 1fr;
+  }
+  .availabilityMeta--chair .availabilityMiniSummary{
+    grid-column:2;
+    justify-self:start;
+    margin-top:2px;
+  }
+  .availabilityCard h3{
+    padding-right:44px;
+  }
+}
+
+
+/* v49/v50 compact footer + next-gig APB header */
+.availabilityFooter{
+  flex-direction:row !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:12px;
+  padding-top:8px;
+}
+.availabilityFooter a{font-size:.9rem}
+.availabilityHeader__topline{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.availabilityHeader__count{align-self:center;border:1px solid rgba(15,23,42,.08);background:#f8fafc;color:#334155;border-radius:999px;padding:6px 10px;font-size:.82rem;font-weight:950;white-space:nowrap}
+.availabilityNextAlert{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;text-decoration:none;color:inherit;border:1px solid rgba(37,99,235,.22);background:linear-gradient(135deg,#eff6ff,#ffffff 58%,#ecfeff);border-radius:20px;padding:10px 12px;box-shadow:0 10px 24px rgba(37,99,235,.10);margin-top:2px}
+.availabilityNextAlert__apb{font-size:.75rem;font-weight:1000;letter-spacing:.08em;color:#fff;background:#2563eb;border-radius:999px;padding:7px 9px;box-shadow:0 6px 14px rgba(37,99,235,.22)}
+.availabilityNextAlert__body{display:grid;gap:1px;min-width:0}
+.availabilityNextAlert__label{font-size:.68rem;font-weight:1000;letter-spacing:.08em;color:#1d4ed8}
+.availabilityNextAlert__body strong{font-size:1rem;line-height:1.12;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.availabilityNextAlert__body span{font-size:.86rem;color:#475569;font-weight:800}
+.availabilityNextAlert__body em{font-style:normal;color:#1d4ed8;font-weight:950}
+.availabilityNextAlert--empty{grid-template-columns:1fr;background:#f8fafc;border-color:rgba(15,23,42,.08);box-shadow:none;color:#64748b}
+@media (max-width:640px){
+  .availabilityHeader{gap:8px}
+  .availabilityHeader__topline h2{margin:0;font-size:clamp(1.7rem,8vw,2.25rem)}
+  .availabilityHeader__count{font-size:.78rem;padding:5px 9px}
+  .availabilityNextAlert{border-radius:18px;padding:9px 10px;gap:9px}
+  .availabilityNextAlert__body strong{font-size:.96rem}
+  .availabilityNextAlert__body span{font-size:.81rem}
+  .availabilityFooter{margin-left:5px;flex-direction:row !important;align-items:center !important;padding-top:7px}
+  .availabilityMsg{font-size:.78rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .availabilityFooter a{font-size:.86rem}
+}
+
+/* v52 availability polish: show user's primary chair in the header without exposing internal IDs */
+.availabilityHeaderChair{
+  font-size:.82em;
+  font-weight:700;
+  color:var(--bb-muted, #667085);
+  white-space:nowrap;
+}
+@media (max-width:520px){
+  .availabilityHeader h2{line-height:1.12;}
+  .availabilityHeaderChair{display:inline-block; margin-top:2px;}
+}
+
+
+/* v53 availability APB RSVP pulse */
+.availabilityNextAlert__labelRow{display:flex;align-items:center;gap:8px;min-width:0}
+.availabilityNextAlert__labelRow .availabilityMiniSummary{margin-left:auto;background:rgba(255,255,255,.82);border-color:rgba(37,99,235,.16);box-shadow:0 4px 12px rgba(37,99,235,.08)}
+@media (max-width:640px){.availabilityNextAlert__labelRow .availabilityMiniSummary{font-size:.78rem;gap:5px;padding:2px 6px}}
+
+.availabilityCard{scroll-margin-top:16px}
+.availabilityCard:target{outline:3px solid rgba(37,99,235,.28);box-shadow:0 14px 34px rgba(37,99,235,.18)}
+.availabilityNextAlert{cursor:pointer}
+
+/* v56 availability optimistic save feedback */
+.availabilityMsg.is-saving{color:#1d4ed8;font-weight:900}
+.availabilityMsg.is-saved{color:#166534;font-weight:900}
+.availabilityMsg.is-error{color:#b91c1c;font-weight:950}
+
+/* BBHub v60 availability location fallback polish */
+.availabilityMeta--location{min-width:0;}
+.availabilityLocationText{min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.availabilityLocationText--empty{color:#64748b;font-weight:700;}
+@media (max-width:640px){
+  .availabilityMeta--location{flex-wrap:nowrap;}
+  .availabilityLocationText{display:inline-block;}
+}

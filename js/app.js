@@ -16,7 +16,9 @@ const state = {
   route: {
     eventId: routeParams.get("event") || "",
     mode: routeParams.get("mode") || "",
-    view: routeParams.get("view") || (routeParams.get("mode") === "dashboard" ? "dashboard" : (routeParams.get("event") ? "public" : "normal"))
+    memberParam: routeParams.get("member") || routeParams.get("member_id") || "",
+    keyParam: routeParams.get("key") || routeParams.get("login_key") || "",
+    view: routeParams.get("view") || (routeParams.get("mode") === "dashboard" ? "dashboard" : (routeParams.get("mode") === "availability" ? "availability" : (routeParams.get("event") ? "public" : "normal")))
   }
 };
 
@@ -340,6 +342,7 @@ function switchView(view){
   if(view === "library") renderLibrary();
   if(view === "planner") renderMatrixHome();
   if(view === "dashboard") renderNudgeDashboard();
+  if(view === "availability") renderAvailabilityView();
   renderPlanner();
   hideLoading();
   if(view === "debug" && DEBUG) renderDebugPanel(state);
@@ -354,7 +357,7 @@ function labelForStatus(status){
 }
 function statusClass(status){ return String(status || "").toUpperCase().toLowerCase() || "none"; }
 function parseRsvpTimestamp(r){
-  const raw = r?.timestamp || "";
+  const raw = r?.updated_at || r?.timestamp || r?.created_at || r?.saved_at || r?.datetime || r?.date_time || "";
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
@@ -390,9 +393,9 @@ function normalizeChair(ch){
 function normalizeAssignment(a){
   return {
     ...a,
-    chair_code: a.chair_code || a.chair_id || "",
-    event_id: a.event_id || a.id || "",
-    member_id: a.member_id || ""
+    chair_code: a.chair_code || a.chair_id || a.chair || a.position || "",
+    event_id: a.event_id || a.event || a.eventId || a.gig_id || a.id || "",
+    member_id: a.member_id || a.member || a.memberId || a.member_key || a.person_id || a.login_key || a.key || ""
   };
 }
 function getEventProgramRows(event){
@@ -454,6 +457,468 @@ function renderSavedResponseMeta(resp){
   const who = escapeHtml(getInitials(state.session.display_name || [state.session.first_name, state.session.last_name].filter(Boolean).join(" ") || "Member").toUpperCase());
   return `<div class="responseSavedMeta"><span class="avatarCircle avatarCircle--tiny">${who}</span><span>You’re ${escapeHtml(labelForStatus(resp.status))}${when ? ` · updated ${escapeHtml(when)}` : ""}${exact ? ` · ${escapeHtml(exact)}` : ""}</span></div>`;
 }
+
+function canonicalRsvpStatus(resp){
+  const r = resp ? normalizeRsvpRow(resp) : null;
+  return String(r?.status || r?.response || r?.availability || r?.rsvp || r?.answer || "").trim().toUpperCase();
+}
+function availabilityStatusLabel(status){
+  const s = String(status || "").toUpperCase();
+  if(s === "Y") return "I'm available";
+  if(s === "M") return "Maybe";
+  if(s === "N") return "I'm not available";
+  return "No response";
+}
+function availabilityStatusIcon(status){
+  const s = String(status || "").toUpperCase();
+  if(s === "Y") return "✅";
+  if(s === "M") return "?";
+  if(s === "N") return "❌";
+  return "—";
+}
+function compactIdentity(v){
+  return String(v || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function expandIdentityKeys(values){
+  const out = [];
+  values.forEach(v => {
+    const raw = String(v || "").trim().toLowerCase();
+    if(raw) out.push(raw);
+    const compact = compactIdentity(raw);
+    if(compact) out.push(compact);
+  });
+  return [...new Set(out)];
+}
+function availabilityMemberMatch(member, token){
+  const t = String(token || "").trim().toLowerCase();
+  if(!t) return false;
+  const wanted = availabilityMemberKeys(member);
+  return wanted.includes(t) || wanted.includes(compactIdentity(t));
+}
+function availabilityMemberKeys(memberOrId){
+  const m = (typeof memberOrId === "object" && memberOrId)
+    ? memberOrId
+    : ((state.members || []).find(x => String(x.member_id || "") === String(memberOrId || "")) || { member_id: memberOrId });
+  const firstLast = `${m.first_name || ""}.${m.last_name || ""}`;
+  const firstLast2 = `${m.given_name || ""}.${m.family_name || ""}`;
+  return expandIdentityKeys([
+    m.member_id, m.member, m.member_key, m.login_key, m.key, m.email, m.display_name, m.name,
+    m.first_name, m.given_name, m.last_name, m.family_name, firstLast, firstLast2
+  ]);
+}
+function normalizeRsvpRow(r){
+  const eventId = firstNonEmpty(r.event_id, r.event, r.eventId, r.gig_id, r.gig);
+  const memberId = firstNonEmpty(r.member_id, r.member, r.memberId, r.member_key, r.person_id, r.login_key, r.key);
+  const status = firstNonEmpty(r.status, r.response, r.availability, r.rsvp, r.answer);
+  return { ...r, event_id: eventId, member_id: memberId, status, response: status };
+}
+function rsvpMatchesMember(r, memberId){
+  const nr = normalizeRsvpRow(r);
+  const rowKeys = expandIdentityKeys([nr.member_id, r.login_key, r.key, r.email, r.member, r.member_key, r.name, r.display_name]);
+  const wanted = availabilityMemberKeys(memberId);
+  return rowKeys.some(k => wanted.includes(k));
+}
+function resolveAvailabilityMember(){
+  const key = String(state.route.keyParam || "").trim();
+  const memberParam = String(state.route.memberParam || "").trim();
+  if(key){
+    const byKey = (state.members || []).find(m => availabilityMemberMatch(m, key));
+    if(byKey) return byKey;
+  }
+  if(memberParam){
+    const byMember = (state.members || []).find(m => availabilityMemberMatch(m, memberParam));
+    if(byMember) return byMember;
+  }
+  if(state.session){
+    const bySession = memberById(state.session.member_id);
+    if(bySession) return { ...bySession, ...state.session };
+    return state.session;
+  }
+  return null;
+}
+function assignmentsForMember(memberId){
+  return (state.assignments || []).map(normalizeAssignment).filter(a => {
+    const keys = expandIdentityKeys([a.member_id, a.member, a.member_key, a.login_key, a.key, a.email, a.name, a.display_name]);
+    const wanted = availabilityMemberKeys(memberId);
+    return keys.some(k => wanted.includes(k));
+  });
+}
+function titleCaseName(str){
+  return String(str || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[._-]+/g, " ")
+    .replace(/\b[a-z]/g, c => c.toUpperCase());
+}
+function firstNameForHeader(member){
+  const fromMember = firstNonEmpty(member?.first_name, member?.given_name);
+  if(fromMember) return titleCaseName(fromMember).split(" ")[0];
+  const display = firstNonEmpty(member?.display_name, member?.name);
+  if(display) return titleCaseName(display).split(" ")[0];
+  const idFirst = String(member?.member_id || "").split(/[.@_\s-]+/)[0];
+  return titleCaseName(idFirst || "Member").split(" ")[0];
+}
+function daysRelativeLabel(d){
+  if(!(d instanceof Date) || Number.isNaN(+d)) return "";
+  const today = new Date();
+  const a = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const b = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((b - a) / 86400000);
+  if(days === 0) return "today";
+  if(days === 1) return "tomorrow";
+  if(days === -1) return "yesterday";
+  if(days > 1) return `${days} days from now`;
+  return `${Math.abs(days)} days ago`;
+}
+function formatAvailabilityDate(event){
+  if(!(event?.parsed instanceof Date) || Number.isNaN(+event.parsed)) return "Date TBC";
+  const date = event.parsed.toLocaleDateString("en-AU", { weekday:"short", day:"2-digit", month:"short" });
+  const time = event.start_time ? event.parsed.toLocaleTimeString("en-AU", { hour:"2-digit", minute:"2-digit", hour12:true }).replace("AM", "am").replace("PM", "pm") : "";
+  const rel = daysRelativeLabel(event.parsed);
+  return `${date}${time ? ` · ${time}` : ""}${rel ? ` (${rel})` : ""}`;
+}
+
+function formatAvailabilityHeaderDate(event){
+  if(!(event?.parsed instanceof Date) || Number.isNaN(+event.parsed)) return "Date TBC";
+  const date = event.parsed.toLocaleDateString("en-AU", { weekday:"short", day:"2-digit", month:"short" });
+  const time = event.parsed.toLocaleTimeString("en-AU", { hour:"2-digit", minute:"2-digit", hour12:true }).replace("AM", "am").replace("PM", "pm");
+  return `${date} · ${time}`;
+}
+function renderAvailabilityNextGigAlert(nextEvent){
+  if(!nextEvent) return `<div class="availabilityNextAlert availabilityNextAlert--empty"><div><strong>APB</strong><span>No upcoming gigs found.</span></div></div>`;
+  const rel = daysRelativeLabel(nextEvent.parsed) || "date TBC";
+  const title = nextEvent.title || nextEvent.event_name || nextEvent.name || nextEvent.event_id || "Next gig";
+  const href = `#${availabilityCardAnchor(nextEvent.event_id)}`;
+  return `<a class="availabilityNextAlert" href="${escapeHtml(href)}" aria-label="Jump to next gig card: ${escapeHtml(title)}">
+    <div class="availabilityNextAlert__apb">APB</div>
+    <div class="availabilityNextAlert__body">
+      <div class="availabilityNextAlert__labelRow"><div class="availabilityNextAlert__label">NEXT GIG</div>${renderAvailabilityMiniSummary(nextEvent.event_id)}</div>
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(formatAvailabilityHeaderDate(nextEvent))} <em>(${escapeHtml(rel)})</em></span>
+    </div>
+  </a>`;
+}
+
+function isAvailabilityGig(event){
+  const type = String(event?.type || event?.event_type || event?.category || "").trim().toLowerCase();
+  if(type) return ["gig", "performance", "concert", "job"].includes(type);
+  const title = String(event?.title || event?.event_name || event?.name || "").toLowerCase();
+  return !/(rehearsal|practice|sectional)/.test(title);
+}
+
+function firstNonEmpty(...vals){
+  for(const v of vals){
+    const s = String(v || "").trim();
+    if(s) return s;
+  }
+  return "";
+}
+function isProbablyUrl(v){
+  return /^https?:\/\//i.test(String(v || "").trim());
+}
+function googleDirectionsUrl(destination){
+  const d = String(destination || "").trim();
+  if(!d) return "";
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d)}`;
+}
+function eventField(row, ...names){
+  if(!row) return "";
+  for(const name of names){
+    const direct = row[name];
+    if(String(direct || "").trim()) return direct;
+  }
+  const wanted = names.map(n => String(n).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  for(const [key, value] of Object.entries(row)){
+    const normKey = String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+    if(wanted.includes(normKey) && String(value || "").trim()) return value;
+  }
+  return "";
+}
+function availabilityLocationLinks(event){
+  const venue = firstNonEmpty(
+    eventField(event, "location", "venue", "address", "place", "destination", "where", "site", "map_location"),
+    event?.venue, event?.location, event?.address
+  );
+  const mapUrl = firstNonEmpty(eventField(event,
+    "map_url", "maps_url", "map", "directions_url", "direction_url", "google_maps_url", "google_map_url", "location_url", "venue_url"
+  ));
+  const parkingUrl = firstNonEmpty(eventField(event,
+    "parking_url", "parking_map_url", "parking", "park_url", "carpark_url", "car_park_url"
+  ));
+  const entryUrl = firstNonEmpty(eventField(event,
+    "entry_url", "entrance_url", "access_url", "entry", "entrance", "door_url"
+  ));
+  const directionsHref = mapUrl || googleDirectionsUrl(venue);
+  const locationLabel = venue || (directionsHref ? "Location" : "Location TBC");
+  const locationNode = directionsHref
+    ? `<a class="availabilityLocationText availabilityLocationText--link" href="${escapeHtml(directionsHref)}" target="_blank" rel="noopener" title="Open directions">${escapeHtml(locationLabel)}</a>`
+    : `<span class="availabilityLocationText availabilityLocationText--empty">${escapeHtml(locationLabel)}</span>`;
+  const extraLinks = [];
+  if(parkingUrl) extraLinks.push(`<a href="${escapeHtml(parkingUrl)}" target="_blank" rel="noopener">Parking</a>`);
+  if(entryUrl) extraLinks.push(`<a href="${escapeHtml(entryUrl)}" target="_blank" rel="noopener">Entry</a>`);
+  return `<div class="availabilityMeta availabilityMeta--location"><span class="material-symbols-outlined">location_on</span>${locationNode}${extraLinks.length ? `<span class="availabilityLinkRow">${extraLinks.join("<span class=\"dotSep\">·</span>")}</span>` : ""}</div>`;
+}
+
+function availabilityChairLabel(assignment, event){
+  const code = String(assignment?.chair_code || assignment?.chair_id || "").trim();
+  if(!code) return "";
+  const assignmentBand = String(assignment?.band_type || "").trim();
+  const eventBand = String(event?.band_type || event?.band || "").trim();
+  const wantedBand = assignmentBand || eventBand;
+  const chairs = (state.bandChairs || []).map(normalizeChair);
+  const exact = chairs.find(ch =>
+    String(ch.chair_code || "").trim() === code &&
+    (!wantedBand || !String(ch.band_type || "").trim() || String(ch.band_type || "").trim() === wantedBand)
+  ) || chairs.find(ch => String(ch.chair_code || "").trim() === code);
+  const full = String(
+    assignment?.chair_label || assignment?.chair_name ||
+    exact?.chair_label || exact?.chair_name || exact?.instrument || exact?.name || ""
+  ).trim();
+  if(full && full !== code) return `${full} · ${code}`;
+  return code;
+}
+
+function chairNameOnly(label){
+  return String(label || "").split(" · ")[0].trim();
+}
+function primaryAvailabilityChair(memberId, events, byEvent){
+  const now = new Date();
+  const sorted = (events || []).filter(e => e?.parsed instanceof Date && !Number.isNaN(+e.parsed)).sort((a,b) => a.parsed - b.parsed);
+  const upcoming = sorted.find(e => e.parsed >= now && (byEvent.get(String(e.event_id)) || []).length);
+  const chosen = upcoming || sorted.find(e => (byEvent.get(String(e.event_id)) || []).length);
+  const assignment = chosen ? (byEvent.get(String(chosen.event_id)) || [])[0] : null;
+  return assignment ? chairNameOnly(availabilityChairLabel(assignment, chosen)) : "";
+}
+
+function rsvpForAnyMember(eventId, memberId){
+  const rows = (state.rsvp || [])
+    .map(normalizeRsvpRow)
+    .filter(r => normEventId(r.event_id) === normEventId(eventId) && rsvpMatchesMember(r, memberId))
+    .sort((a,b) => parseRsvpTimestamp(b) - parseRsvpTimestamp(a));
+  return rows[0] || null;
+}
+function availabilitySummaryForEvent(eventId){
+  // Count the expected players from Assignments, but also include anybody who has
+  // responded to this gig even if they are not assigned to a chair yet.
+  // Availability is a person/event state; chair assignment is only display context.
+  const ids = new Set(
+    (state.assignments || [])
+      .map(normalizeAssignment)
+      .filter(a => normEventId(a.event_id) === normEventId(eventId))
+      .map(a => String(firstNonEmpty(a.member_id, a.member, a.member_key, a.login_key, a.key, a.email, a.name, a.display_name)).trim())
+      .filter(Boolean)
+  );
+
+  (state.rsvp || [])
+    .map(normalizeRsvpRow)
+    .filter(r => normEventId(r.event_id) === normEventId(eventId))
+    .forEach(r => {
+      const rowKey = String(firstNonEmpty(r.member_id, r.member, r.member_key, r.login_key, r.key, r.email, r.name, r.display_name)).trim();
+      if(rowKey) ids.add(rowKey);
+    });
+
+  const summary = { y:0, m:0, n:0, none:0 };
+  ids.forEach(memberId => {
+    const resp = rsvpForAnyMember(eventId, memberId);
+    const status = canonicalRsvpStatus(resp);
+    if(status === "Y") summary.y++;
+    else if(status === "M") summary.m++;
+    else if(status === "N") summary.n++;
+    else summary.none++;
+  });
+  return summary;
+}
+function renderAvailabilityMiniSummary(eventId){
+  const s = availabilitySummaryForEvent(eventId);
+  return `<span class="availabilityMiniSummary" title="Gig RSVP summary: yes ${s.y}, maybe ${s.m}, no ${s.n}, no reply ${s.none}" data-availability-summary="${escapeHtml(eventId)}" aria-label="Gig RSVP summary: yes ${s.y}, maybe ${s.m}, no ${s.n}, no reply ${s.none}">` +
+    `<span class="availabilityMiniSummary__item availabilityMiniSummary__item--yes">✓${s.y}</span>` +
+    `<span class="availabilityMiniSummary__item availabilityMiniSummary__item--maybe">?${s.m}</span>` +
+    `<span class="availabilityMiniSummary__item availabilityMiniSummary__item--no">✕${s.n}</span>` +
+    `<span class="availabilityMiniSummary__item availabilityMiniSummary__item--none">!${s.none}</span>` +
+  `</span>`;
+}
+function availabilityCardAnchor(eventId){
+  return "gig-" + String(eventId || "").trim().replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function updateAvailabilityMiniSummaryUI(eventId){
+  const safeEventId = (window.CSS && CSS.escape) ? CSS.escape(String(eventId)) : String(eventId).replace(/"/g, '\"');
+  const nodes = document.querySelectorAll(`[data-availability-summary="${safeEventId}"]`);
+  if(!nodes.length) return;
+  nodes.forEach(node => {
+    const wrap = document.createElement("span");
+    wrap.innerHTML = renderAvailabilityMiniSummary(eventId);
+    const replacement = wrap.firstElementChild;
+    if(replacement) node.replaceWith(replacement);
+  });
+}
+function memberDisplayName(member){
+  return member?.display_name || [member?.first_name, member?.last_name].filter(Boolean).join(" ") || member?.member_id || "Member";
+}
+function buildAvailabilityHref(eventId, member){
+  const key = state.route.keyParam || member?.login_key || "";
+  const p = new URLSearchParams();
+  p.set("event", eventId);
+  if(key) p.set("key", key);
+  return `./?${p.toString()}`;
+}
+function renderAvailabilityView(){
+  const host = $("availabilityApp");
+  if(!host) return;
+  const member = resolveAvailabilityMember();
+  if(!member){
+    host.className = "availabilityApp";
+    host.innerHTML = `<div class="availabilityHeader"><div class="label">Availability</div><h2>Who is this for?</h2><p class="muted">Open with <strong>?mode=availability&member=member_id</strong>, or login first.</p></div>`;
+    return;
+  }
+  const memberId = firstNonEmpty(member.member_id, member.member, member.member_key, member.login_key, member.key, state.route.memberParam, state.route.keyParam);
+  const assigned = assignmentsForMember(memberId);
+  const byEvent = new Map();
+  assigned.forEach(a => {
+    if(!a.event_id) return;
+    if(!byEvent.has(String(a.event_id))) byEvent.set(String(a.event_id), []);
+    byEvent.get(String(a.event_id)).push(a);
+  });
+  const nowCutoff = new Date(new Date().getFullYear(), 0, 1);
+  const events = (state.events || [])
+    .map(normalizeEvent)
+    .filter(e => isAvailabilityGig(e))
+    .filter(e => e.parsed instanceof Date && !Number.isNaN(+e.parsed) && e.parsed >= nowCutoff)
+    .sort((a,b) => a.parsed - b.parsed);
+  const saveDisabled = !member.login_key && !state.route.keyParam && !(state.session && String(state.session.member_id) === String(memberId));
+  const name = memberDisplayName(member);
+  const firstUpcomingIndex = events.findIndex(e => e.parsed instanceof Date && !Number.isNaN(+e.parsed) && e.parsed >= new Date());
+  const nextGig = firstUpcomingIndex >= 0 ? events[firstUpcomingIndex] : null;
+  const headerChair = primaryAvailabilityChair(memberId, events, byEvent);
+  const rows = events.map((event, eventIndex) => {
+    const chairs = byEvent.get(String(event.event_id)) || [];
+    const chairText = chairs.length
+      ? chairs.map(a => availabilityChairLabel(a, event)).filter(Boolean).join(" · ")
+      : "Not assigned";
+    const resp = rsvpForAnyMember(event.event_id, memberId);
+    const status = canonicalRsvpStatus(resp);
+    const d = parseResponseDate(resp);
+    const ago = d ? timeAgoShort(d) : "";
+    const statusText = status ? availabilityStatusLabel(status) : "No response yet";
+    const detailHref = buildAvailabilityHref(event.event_id, member);
+    const cardExtraClass = `${status ? "availabilityCard--" + statusClass(status) : "availabilityCard--none"}${eventIndex === firstUpcomingIndex ? " availabilityCard--next" : ""}`;
+    return `<article id="${escapeHtml(availabilityCardAnchor(event.event_id))}" class="availabilityCard ${cardExtraClass}" data-availability-card="${escapeHtml(event.event_id)}">
+      <div class="availabilityCard__top">
+        <div>
+          <h3><span class="availabilityCardIndex">${eventIndex + 1}.</span><span>${escapeHtml(event.title || event.event_name || event.event_id)}</span></h3>
+          <div class="availabilityMeta"><span class="material-symbols-outlined">event</span><span>${escapeHtml(formatAvailabilityDate(event))}</span></div>
+          <div class="availabilityMeta availabilityMeta--chair"><span class="material-symbols-outlined">stadia_controller</span><span class="availabilityChairText">Chair: ${escapeHtml(chairText)}</span>${renderAvailabilityMiniSummary(event.event_id)}</div>
+          ${availabilityLocationLinks(event)}
+        </div>
+        <div class="availabilityBadge availabilityBadge--${escapeHtml(statusClass(status))}"><span>${escapeHtml(availabilityStatusIcon(status))}</span><strong>${escapeHtml(statusText)}</strong>${ago ? `<small>${escapeHtml(ago)}</small>` : `<small>not yet sent</small>`}</div>
+      </div>
+      <div class="availabilityActions" role="group" aria-label="Availability response for ${escapeHtml(event.title)}">
+        ${[
+          ["Y", "✅", "Available"],
+          ["M", "?", "Maybe"],
+          ["N", "❌", "No"]
+        ].map(([code, icon, label]) => `<button class="availabilityBtn ${status === code ? "is-selected" : ""}" type="button" data-availability-save="${escapeHtml(event.event_id)}" data-member-id="${escapeHtml(memberId)}" data-status="${code}" ${saveDisabled ? "disabled" : ""}><span>${icon}</span><strong>${label}</strong></button>`).join("")}
+      </div>
+      <div class="availabilityFooter"><span class="availabilityMsg" data-availability-msg="${escapeHtml(event.event_id)}">${saveDisabled ? "Login key needed to save from this link." : "Tap once to save."}</span><a href="${escapeHtml(detailHref)}">More Details →</a></div>
+    </article>`;
+  }).join("");
+  host.className = "availabilityApp";
+  host.innerHTML = `<div class="availabilityHeader">
+    <div class="availabilityHeader__topline"><div><div class="label">My gigs</div><h2>Hi ${escapeHtml(firstNameForHeader(member))}${headerChair ? ` <span class="availabilityHeaderChair">· ${escapeHtml(headerChair)}</span>` : ""}${DEBUG ? ` <span class="debugMemberId">(${escapeHtml(memberId)})</span>` : ""}</h2></div><div class="availabilityHeader__count">${events.length} gig${events.length === 1 ? "" : "s"}</div></div>
+    ${renderAvailabilityNextGigAlert(nextGig)}
+    <p class="muted">Quick availability for ${escapeHtml(name)}. Showing all gigs this year; chair appears where assigned.</p>
+    <div class="availabilitySummary"><span>✅ Available</span><span>? Maybe</span><span>❌ Not available</span><span class="summaryNoResponse">No response yet</span></div>
+  </div>${events.length ? `<div class="availabilityList">${rows}</div>` : `<div class="empty">No gigs found for this year.</div>`}`;
+}
+
+function updateAvailabilityCardUI(eventId, status, opts = {}){
+  const safeEventId = (window.CSS && CSS.escape) ? CSS.escape(String(eventId)) : String(eventId).replace(/"/g, '\"');
+  const card = document.querySelector(`[data-availability-card="${safeEventId}"]`);
+  if(!card) return;
+  const s = String(status || "").toUpperCase();
+  const hasStatus = ["Y","M","N"].includes(s);
+
+  card.classList.remove("availabilityCard--y", "availabilityCard--m", "availabilityCard--n", "availabilityCard--none");
+  card.classList.add(hasStatus ? `availabilityCard--${statusClass(s)}` : "availabilityCard--none");
+
+  const badge = card.querySelector(".availabilityBadge");
+  if(badge){
+    const label = hasStatus ? availabilityStatusLabel(s) : "No response yet";
+    const icon = hasStatus ? availabilityStatusIcon(s) : "—";
+    badge.className = `availabilityBadge availabilityBadge--${statusClass(s)}`;
+    badge.innerHTML = `<span>${escapeHtml(icon)}</span><strong>${escapeHtml(label)}</strong><small>${opts.pending ? "saving…" : (hasStatus ? "just now" : "not yet sent")}</small>`;
+  }
+  card.querySelectorAll(".availabilityBtn").forEach(b => {
+    const selected = hasStatus && String(b.dataset.status || "").toUpperCase() === s;
+    b.classList.toggle("is-selected", selected);
+    b.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+  const msg = card.querySelector(".availabilityMsg");
+  if(msg){
+    msg.classList.remove("is-saving", "is-saved", "is-error");
+    if(opts.error) msg.classList.add("is-error");
+    else if(opts.pending) msg.classList.add("is-saving");
+    else if(opts.saved) msg.classList.add("is-saved");
+    msg.textContent = opts.message || (opts.pending ? `Saving — ${availabilityStatusLabel(s)}` : (opts.saved ? `Saved ✓ ${availabilityStatusLabel(s)}` : "Tap once to save."));
+  }
+}
+
+function availabilityMemberByAnyId(memberId){
+  return (state.members || []).find(m => availabilityMemberMatch(m, memberId)) || resolveAvailabilityMember();
+}
+
+function localAvailabilityPayload(eventId, memberId, status){
+  const now = new Date().toISOString();
+  const member = availabilityMemberByAnyId(memberId) || {};
+  const loginKey = firstNonEmpty(state.route.keyParam, member.login_key, member.key, state.route.memberParam);
+  const displayName = memberDisplayName(member);
+  return {
+    event_id:eventId,
+    event:eventId,
+    member_id:firstNonEmpty(member.member_id, memberId, state.route.memberParam, loginKey),
+    member:firstNonEmpty(state.route.memberParam, member.member_id, memberId),
+    member_key:firstNonEmpty(member.member_key, member.member_id, memberId),
+    login_key:loginKey,
+    key:loginKey,
+    email:member.email || "",
+    name:displayName,
+    display_name:displayName,
+    first_name:member.first_name || member.given_name || "",
+    last_name:member.last_name || member.family_name || "",
+    status,
+    response:status,
+    availability:status,
+    rsvp:status,
+    updated_at:now,
+    timestamp:now,
+    saved_at:now,
+    comment:""
+  };
+}
+
+function upsertLocalAvailabilityRsvp(eventId, memberId, status){
+  const payload = localAvailabilityPayload(eventId, memberId, status);
+  if(!Array.isArray(state.rsvp)) state.rsvp = [];
+  const existing = state.rsvp.find(r => normEventId(normalizeRsvpRow(r).event_id) === normEventId(eventId) && rsvpMatchesMember(r, memberId));
+  if(existing){
+    Object.assign(existing, payload);
+  }else{
+    state.rsvp.push(payload);
+  }
+}
+
+
+async function persistAvailabilityRsvp(eventId, memberId, status){
+  const member = availabilityMemberByAnyId(memberId) || {};
+  const loginKey = firstNonEmpty(state.route.keyParam, member.login_key, member.key, state.route.memberParam);
+  if(!loginKey) return { ok:false, message:"Missing login key." };
+  const payload = localAvailabilityPayload(eventId, memberId, status);
+  return await saveRsvpResponse({
+    ...payload,
+    member_id:firstNonEmpty(member.member_id, memberId, state.route.memberParam, loginKey),
+    login_key:loginKey
+  });
+}
+
 
 function renderShowcaseResponseReminder(response){
   if(response){
@@ -1998,6 +2463,7 @@ function bindHomeDelegates(){
       }
       saveGuestBandFilter(selected);
       renderHome();
+      if(document.querySelector("#view-availability.active")) renderAvailabilityView();
       if(document.querySelector("#view-stage.active")) renderStage();
       if(document.querySelector("#view-planner.active")) renderMatrixHome();
   renderPlanner();
@@ -2190,6 +2656,8 @@ function bindLoginUi(){
     renderHome();
     renderMatrixHome();
   renderPlanner();
+    if(document.querySelector("#view-availability.active")) renderAvailabilityView();
+    if(document.querySelector("#view-availability.active")) renderAvailabilityView();
   });
   $("logoutBtn").addEventListener("click", () => {
     Auth.clearUser();
@@ -2360,6 +2828,7 @@ async function start(){
     const tRender0 = performance.now();
     renderHome();
     if(state.route.view === "dashboard") switchView("dashboard");
+    if(state.route.view === "availability") switchView("availability");
     timings.renderHomeMs = Math.round(performance.now() - tRender0);
     timings.totalMs = Math.round(performance.now() - t0);
     state.debugTimings = timings;
@@ -2370,6 +2839,7 @@ async function start(){
 
     setInterval(() => {
       renderHome();
+      if(document.querySelector("#view-availability.active")) renderAvailabilityView();
       if(document.querySelector("#view-stage.active")) renderStage();
       if(DEBUG) renderDebugPanel(state);
     }, 60000);
@@ -2389,6 +2859,49 @@ window.addEventListener("DOMContentLoaded", () => {
   bindControls();
   bindLoginUi();
   bindHomeDelegates();
+
+  document.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-availability-save]");
+    if(!btn) return;
+    const eventId = btn.dataset.availabilitySave;
+    const memberId = btn.dataset.memberId;
+    const status = btn.dataset.status;
+    const card = btn.closest('.availabilityCard');
+    const previous = rsvpForAnyMember(eventId, memberId);
+    const previousStatus = canonicalRsvpStatus(previous);
+    const rsvpSnapshot = (state.rsvp || []).map(r => ({ ...r }));
+
+    // Optimistic local update: update the source array first, then redraw the availability screen from that source.
+    // This deliberately does NOT depend on the member being assigned to a chair.
+    upsertLocalAvailabilityRsvp(eventId, memberId, status);
+    renderAvailabilityView();
+    updateAvailabilityCardUI(eventId, status, { pending:true });
+    const pendingCard = document.querySelector(`[data-availability-card="${(window.CSS && CSS.escape) ? CSS.escape(String(eventId)) : String(eventId).replace(/"/g, '\"')}"]`);
+    pendingCard?.querySelectorAll('.availabilityBtn').forEach(b => b.disabled = true);
+
+    const result = await persistAvailabilityRsvp(eventId, memberId, status);
+    if(result.ok){
+      upsertLocalAvailabilityRsvp(eventId, memberId, status);
+      renderAvailabilityView();
+      updateAvailabilityCardUI(eventId, status, { pending:false, saved:true, message:`Saved ✓ ${availabilityStatusLabel(status)}` });
+      const savedCard = document.querySelector(`[data-availability-card="${(window.CSS && CSS.escape) ? CSS.escape(String(eventId)) : String(eventId).replace(/"/g, '\"')}"]`);
+      savedCard?.querySelectorAll('.availabilityBtn').forEach(b => b.disabled = false);
+      setTimeout(() => {
+        const msg = savedCard?.querySelector('.availabilityMsg');
+        if(msg && msg.classList.contains('is-saved')){
+          msg.classList.remove('is-saved');
+          msg.textContent = 'Tap once to save.';
+        }
+      }, 1800);
+      if(document.querySelector("#view-stage.active")) renderStage();
+    }else{
+      state.rsvp = rsvpSnapshot;
+      renderAvailabilityView();
+      updateAvailabilityCardUI(eventId, previousStatus, { pending:false, error:true, message: result.message || "Save failed — tap again." });
+      const errorCard = document.querySelector(`[data-availability-card="${(window.CSS && CSS.escape) ? CSS.escape(String(eventId)) : String(eventId).replace(/"/g, '\"')}"]`);
+      errorCard?.querySelectorAll('.availabilityBtn').forEach(b => b.disabled = false);
+    }
+  });
   document.addEventListener("click", (ev) => {
     const toggle = ev.target.closest("[data-nudge-toggle]");
     const copy = ev.target.closest("[data-nudge-copy]");
